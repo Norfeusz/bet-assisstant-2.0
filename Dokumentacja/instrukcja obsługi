@@ -1,0 +1,649 @@
+# INSTRUKCJA OBSŁUGI - BET ASSISTANT 2.0
+
+**Data aktualizacji:** 30 grudnia 2025  
+**Wersja:** 1.0 (W trakcie migracji)
+
+---
+
+## 1. WPROWADZENIE
+
+### Czym jest Bet Assistant 2.0?
+
+**Bet Assistant 2.0** to zaawansowane narzędzie internetowe do analizy meczów piłkarskich i znajdowania okazji do typowania. Aplikacja pomaga:
+
+✅ Importować dane tysięcy meczów z całego świata  
+✅ Analizować statystyki drużyn i rozgrywek  
+✅ Wyszukiwać typy według 15+ zaawansowanych algorytmów  
+✅ Zarządzać obserwowanymi meczami i kuponami  
+✅ Generować raporty i statystyki zakładów
+
+### Wymagania systemowe
+
+- Przeglądarka internetowa (Chrome, Firefox, Edge, Safari)
+- Połączenie z internetem
+- Uruchomiony backend (localhost:3000) - tylko dla deweloperów
+
+---
+
+## 2. URUCHAMIANIE APLIKACJI
+
+### 2.1 Dla deweloperów
+
+1. Otwórz terminal/PowerShell
+2. Przejdź do folderu projektu:
+   ```bash
+   cd "D:\narzędzia\Bet Assistant 2.0"
+   ```
+3. Uruchom aplikację:
+   ```bash
+   npm run dev
+   ```
+4. Otwórz w przeglądarce: **http://localhost:5173**
+
+### 2.2 Po wdrożeniu (produkcja)
+
+Wpisz adres aplikacji w przeglądarce (zostanie podany po wdrożeniu).
+
+---
+
+## 3. INTERFEJS APLIKACJI
+
+### 3.1 Główne elementy
+
+Po otwarciu aplikacji zobaczysz:
+
+**1. Nagłówek (góra strony)**
+
+```
+⚽ Bet Assistant 2.0
+System zarządzania danymi meczów piłkarskich
+```
+
+**2. Pasek nawigacji (pod nagłówkiem)**
+
+Pięć głównych zakładek:
+
+- 📥 **Import** - importowanie meczów z API
+- 🗄️ **Baza Danych** - przeglądanie meczów
+- 🔍 **Wyszukiwarka Typów** - znajdowanie okazji
+- 📊 **Strefa Typera** - zarządzanie kuponami
+- 📈 **Analityka** - raporty i statystyki
+
+**3. Główna zawartość**
+
+Obszar poniżej nawigacji, gdzie wyświetla się treść aktywnej zakładki.
+
+### 3.2 Nawigacja
+
+**Klikanie zakładek:**
+
+- Kliknij dowolną zakładkę, aby ją otworzyć
+- Aktywna zakładka ma **kolorowe tło** (gradient fioletowy)
+- Nieaktywne zakładki są szare
+
+---
+
+## 4. ZAKŁADKA: 📥 IMPORT
+
+### Co to jest?
+
+Zakładka **Import** służy do pobierania danych meczów z API Football i zapisywania ich w bazie danych.
+
+### 4.1 Główne funkcje (po implementacji)
+
+#### Wybór krajów i lig
+
+1. **Lista krajów** - wybierz kraj (np. Polska, Anglia)
+2. **Lista lig** - zaznacz ligi do śledzenia
+3. **Włącz/wyłącz ligę** - przełącznik ON/OFF
+
+#### Ustawienia importu
+
+1. **Zakres dat**
+
+   - Data OD: wybierz początkową datę
+   - Data DO: wybierz końcową datę
+   - Szybkie przyciski: "Dziś", "Jutro", "Pojutrze", "Tydzień"
+
+2. **Przycisk IMPORT**
+   - Kliknij aby rozpocząć import
+   - Postęp pojawi się na liście poniżej
+
+#### Monitorowanie
+
+- **Statystyki** (u góry):
+
+  - Liczba włączonych lig
+  - Liczba meczów w bazie
+  - Liczba obserwowanych krajów
+
+- **Kolejka importu**:
+
+  - Lista trwających importów
+  - Status każdego zadania (w trakcie / zakończone / błąd)
+  - Możliwość anulowania
+
+- **Zadania w tle**:
+  - Lista wszystkich zadań systemowych
+  - Historia importów
+
+### 4.2 Typowy workflow
+
+```
+1. Wybierz kraj (np. "England")
+2. Zaznacz ligi (np. "Premier League")
+3. Wybierz zakres dat (np. "Tydzień")
+4. Kliknij "IMPORT"
+5. Obserwuj postęp w kolejce
+6. Po zakończeniu - dane są w bazie
+```
+
+### 4.3 Wskazówki
+
+⚠️ **Import może potrwać kilka minut** dla dużych zakresów dat  
+⚠️ **API Football ma limity** - nie importuj zbyt często  
+✅ **Importuj regularnie** aby mieć aktualne dane
+
+---
+
+## 5. ZAKŁADKA: 🗄️ BAZA DANYCH
+
+### Co to jest?
+
+Zakładka **Baza Danych** służy do przeglądania wszystkich meczów zapisanych w systemie.
+
+### 5.1 Główne funkcje (po implementacji)
+
+#### Panel filtrów (lewa strona)
+
+1. **Filtr po kraju**
+
+   - Dropdown z listą krajów
+   - Wybierz aby zobaczyć tylko mecze z tego kraju
+
+2. **Filtr po lidze**
+
+   - Dropdown z ligami (zależne od kraju)
+   - Wybierz konkretną ligę
+
+3. **Filtr po drużynie**
+
+   - Pole tekstowe z wyszukiwaniem
+   - Wpisz nazwę drużyny (np. "Manchester")
+   - Autocomplete podpowiada dopasowania
+
+4. **Przycisk SZUKAJ**
+   - Zastosuj filtry
+   - Wyświetl wyniki
+
+#### Tabela wyników (prawa strona)
+
+**Kolumny:**
+
+- Data meczu
+- Drużyna gospodarzy
+- Wynik
+- Drużyna gości
+- Liga
+- Akcje (szczegóły)
+
+**Funkcje:**
+
+- **Sortowanie**: kliknij nagłówek kolumny
+- **Szczegóły meczu**: kliknij przycisk "👁️ Zobacz"
+- **Paginacja**: przyciski 5, 10, 20, Wszystkie
+
+#### Modal szczegółów meczu
+
+Po kliknięciu "Zobacz" otwiera się okno z:
+
+- Pełne informacje o meczu
+- Statystyki obu drużyn
+- Historia H2H (head-to-head)
+- Forma ostatnich meczów
+- Przycisk "Zamknij"
+
+### 5.2 Typowy workflow
+
+```
+1. Wybierz kraj (np. "Spain")
+2. Wybierz ligę (np. "La Liga")
+3. (Opcjonalnie) Wpisz drużynę (np. "Real")
+4. Kliknij "SZUKAJ"
+5. Przejrzyj wyniki w tabeli
+6. Kliknij "Zobacz" dla szczegółów
+7. Zamknij modal po przeczytaniu
+```
+
+### 5.3 Wskazówki
+
+💡 **Nie wybieraj wszystkich filtrów naraz** - zacznij od kraju  
+💡 **Autocomplete** w polu drużyny pomoże znaleźć nazwę  
+💡 **Limit wyników** - użyj przycisku "5" lub "10" dla szybszego ładowania
+
+---
+
+## 6. ZAKŁADKA: 🔍 WYSZUKIWARKA TYPÓW
+
+### Co to jest?
+
+**Najważniejsza funkcja aplikacji!**
+
+Wyszukiwarka Typów analizuje bazę meczów według 15+ algorytmów i znajduje najbardziej prawdopodobne typy do postawienia.
+
+### 6.1 Główne funkcje (po implementacji)
+
+#### Panel kontrolny (góra)
+
+1. **TOP Wyników**
+
+   - Dropdown: TOP 5, 10, 15, 20
+   - Wybierz ile najlepszych wyników pokazać
+
+2. **Limit meczów**
+
+   - Dropdown: 5, 10, 15, 20, 30, 50, Wszystkie
+   - Ile meczów analizować
+
+3. **Zakres dat**
+   - Data OD / Data DO
+   - Szybkie przyciski: "Dziś", "Jutro", "Pojutrze"
+
+#### Przyciski wyszukiwania (środek)
+
+**Pogrupowane według kategorii:**
+
+**Grupa: REZULTAT**
+
+- 🏆 1X2 (wynik meczu)
+
+**Grupa: BRAMKI**
+
+- ⚽ Over/Under 2.5
+- ⚽ Obie strzelą (BTTS)
+- ⚽ Over 1.5
+- ⚽ Over 3.5
+- ⚽ Clean Sheet
+- ⚽ Suma bramek
+
+**Grupa: ROŻNE**
+
+- 🚩 Over/Under Corners
+- 🚩 Corners Home/Away
+- 🚩 Asian Handicap Corners
+- 🚩 Suma rożnych
+- ... (7 przycisków total)
+
+**Grupa: SPALONE**
+
+- 🔴 Over/Under Offsides
+- 🔴 Offsides Home/Away
+- ... (4 przyciski total)
+
+**Grupa: DOM/WYJAZD**
+
+- 🏠 Wygrana gospodarzy
+- ✈️ Wygrana gości
+- 🏠 Clean Sheet Home
+- ✈️ Clean Sheet Away
+- ... (6 przycisków total)
+
+**Grupa: PIERWSZA POŁOWA**
+
+- ⏱️ Over/Under FH Goals
+
+#### SearchQueue (prawy panel)
+
+**Kolejka wyszukiwań:**
+
+- Lista aktywnych wyszukiwań
+- Aktualnie wykonywane
+- Status (w trakcie / zakończone)
+- Przycisk "Anuluj"
+
+#### Modal wyników (uniwersalny)
+
+Po zakończeniu wyszukiwania otwiera się okno z:
+
+- **Tytuł** - typ wyszukiwania
+- **Zakres dat** - analizowany okres
+- **Tabela wyników:**
+  - Mecz (gospodarze vs goście)
+  - Procent prawdopodobieństwa
+  - Statystyki wspierające
+  - Akcje (dodaj do Bet Builder, obserwuj)
+
+### 6.2 Typowy workflow
+
+```
+1. Ustaw TOP 10 wyników
+2. Ustaw limit 20 meczów
+3. Wybierz "Jutro" jako zakres
+4. Kliknij "⚽ Obie strzelą (BTTS)"
+5. Obserwuj kolejkę po prawej
+6. Po zakończeniu - pojawi się modal z wynikami
+7. Przejrzyj top 10 meczów z najwyższym %
+8. Kliknij "Dodaj do Bet Builder" dla wybranych
+9. Zamknij modal
+```
+
+### 6.3 Wskazówki
+
+🎯 **Zacznij od prostych** - np. "Obie strzelą"  
+🎯 **TOP 10 to sweet spot** - nie za dużo, nie za mało  
+🎯 **Jutro = najlepsze prognozy** - więcej czasu na analizę  
+🎯 **Porównuj algorytmy** - uruchom kilka dla tych samych dat  
+⚠️ **Wyszukiwanie może potrwać** - algorytmy są zaawansowane
+
+---
+
+## 7. ZAKŁADKA: 📊 STREFA TYPERA
+
+### Co to jest?
+
+Zakładka **Strefa Typera** to centrum zarządzania Twoimi typami i kuponami.
+
+### 7.1 Główne funkcje (po implementacji)
+
+#### Backfill (uzupełnianie danych)
+
+- **Uzupełnij brakujące dane** dla obserwowanych meczów
+- Przycisk "Backfill wszystkich"
+- Lista meczów do uzupełnienia
+
+#### Akcje
+
+1. **Accept** - zaakceptuj automatyczne sugestie
+2. **Verify** - sprawdź poprawność danych
+3. **Create Coupon** - utwórz kupon z wybranych meczów
+
+#### Obserwowane mecze
+
+- **Lista meczów** które dodałeś do obserwacji
+- **Szanse zespołów** - procenty prawdopodobieństwa
+- **Akcje**: edytuj, usuń, dodaj do kuponu
+
+#### Google Sheets Integration
+
+- **Synchronizuj z arkuszem** - eksportuj dane
+- **Import z arkusza** - pobierz typy
+- **Konfiguracja**: URL arkusza, arkusz, zakres
+
+### 7.2 Typowy workflow
+
+```
+1. Obserwowane mecze:
+   - Zobacz listę meczów z "Wyszukiwarki Typów"
+   - Sprawdź szanse (procenty)
+
+2. Uzupełnij dane:
+   - Kliknij "Backfill wszystkich"
+   - Poczekaj na uzupełnienie
+
+3. Weryfikuj:
+   - Kliknij "Verify" dla każdego meczu
+   - Potwierdź poprawność
+
+4. Utwórz kupon:
+   - Zaznacz wybrane mecze
+   - Kliknij "Create Coupon"
+   - Zapisz lub wyeksportuj
+
+5. Google Sheets:
+   - Skonfiguruj połączenie
+   - Kliknij "Synchronizuj"
+   - Sprawdź arkusz
+```
+
+### 7.3 Wskazówki
+
+📌 **Regularnie backfilluj** - dane się aktualizują  
+📌 **Weryfikuj przed kuponem** - unikniesz błędów  
+📌 **Google Sheets = backup** - bezpieczne przechowywanie
+
+---
+
+## 8. ZAKŁADKA: 📈 ANALITYKA
+
+### Co to jest?
+
+Zakładka **Analityka** pokazuje statystyki Twoich zakładów i efektywność strategii.
+
+### 8.1 Główne funkcje (po implementacji)
+
+#### Summary Cards (góra)
+
+- **Total Bets** - łączna liczba zakładów
+- **Wins** - wygrane (zielone)
+- **Losses** - przegrane (czerwone)
+- **Win Rate %** - procent wygranych
+- **ROI %** - zwrot z inwestycji
+
+#### Filtry
+
+1. **Zakres dat** - OD / DO
+2. **Typ zakładu** - dropdown (BTTS, Over/Under, etc.)
+3. **Liga** - dropdown
+4. **Przycisk FILTRUJ**
+
+#### Wykresy
+
+- **Success Rate** - wykres kołowy wygranych/przegranych
+- **ROI w czasie** - wykres liniowy
+- **Zakłady według typu** - wykres słupkowy
+- **Zakłady według ligi** - wykres słupkowy
+
+#### Tabela szczegółowa
+
+**Kolumny:**
+
+- Data
+- Mecz
+- Typ zakładu
+- Kurs
+- Wynik (✅/❌)
+- Zysk/Strata
+
+#### Export
+
+- **Przycisk CSV** - pobierz dane do Excel
+- **Przycisk PDF** - wygeneruj raport PDF
+
+### 8.2 Typowy workflow
+
+```
+1. Otwórz zakładkę Analityka
+2. Zobacz karty podsumowania (u góry)
+3. Ustaw filtry (opcjonalnie):
+   - Ostatni miesiąc
+   - Tylko BTTS
+   - Tylko Premier League
+4. Kliknij "FILTRUJ"
+5. Przejrzyj wykresy
+6. Przewiń do tabeli szczegółowej
+7. Eksportuj do CSV jeśli potrzebujesz
+```
+
+### 8.3 Wskazówki
+
+📊 **ROI% to kluczowa metryka** - powinien być > 0%  
+📊 **Analizuj według typu** - sprawdź co działa najlepiej  
+📊 **Export miesięczny** - trackuj postępy
+
+---
+
+## 9. ROZWIĄZYWANIE PROBLEMÓW
+
+### 9.1 Aplikacja nie ładuje się
+
+**Problem:** Biały ekran lub błąd
+**Rozwiązanie:**
+
+1. Sprawdź czy backend działa (localhost:3000)
+2. Odśwież stronę (F5 lub Ctrl+R)
+3. Wyczyść cache przeglądarki (Ctrl+Shift+Del)
+4. Sprawdź konsolę (F12) - pokaż deweloperowi błędy
+
+### 9.2 Import nie działa
+
+**Problem:** Kliknięcie "Import" nic nie robi
+**Rozwiązanie:**
+
+1. Sprawdź czy zaznaczyłeś ligi
+2. Sprawdź czy ustawiłeś zakres dat
+3. Sprawdź limit API (może być wyczerpany)
+4. Poczekaj 1-2 minuty i spróbuj ponownie
+
+### 9.3 Wyszukiwanie trwa bardzo długo
+
+**Problem:** Algorytm pracuje > 5 minut
+**Rozwiązanie:**
+
+1. Zmniejsz limit meczów (zamiast 50 → 20)
+2. Zmniejsz TOP wyników (zamiast TOP 20 → TOP 10)
+3. Zawęź zakres dat (jeden dzień zamiast tygodnia)
+4. Sprawdź SearchQueue - może coś się zapętliło
+
+### 9.4 Brak wyników w Wyszukiwarce
+
+**Problem:** Modal pokazuje "Brak wyników"
+**Rozwiązanie:**
+
+1. To jest OK! - algorytm nie znalazł dopasowań
+2. Zmień parametry (więcej meczów, inny TOP)
+3. Spróbuj innego zakresu dat
+4. Spróbuj innego algorytmu
+
+### 9.5 Google Sheets nie synchronizuje
+
+**Problem:** Błąd przy synchronizacji
+**Rozwiązanie:**
+
+1. Sprawdź URL arkusza (musi być poprawny)
+2. Sprawdź uprawnienia (arkusz musi być publiczny lub udostępniony)
+3. Sprawdź nazwę arkusza (case-sensitive!)
+4. Sprawdź zakres (np. "A1:Z100")
+
+---
+
+## 10. SKRÓTY KLAWISZOWE (po implementacji)
+
+| Skrót    | Akcja                         |
+| -------- | ----------------------------- |
+| `Ctrl+1` | Przejdź do Import             |
+| `Ctrl+2` | Przejdź do Baza Danych        |
+| `Ctrl+3` | Przejdź do Wyszukiwarka Typów |
+| `Ctrl+4` | Przejdź do Strefa Typera      |
+| `Ctrl+5` | Przejdź do Analityka          |
+| `Esc`    | Zamknij otwarty modal         |
+| `Ctrl+F` | Focus na search               |
+
+---
+
+## 11. BEST PRACTICES
+
+### ✅ Dobre praktyki
+
+1. **Importuj regularnie** (codziennie lub co 2-3 dni)
+2. **Analizuj jutrzejsze mecze** (lepsze prognozy)
+3. **Używaj TOP 10** jako punkt startowy
+4. **Porównuj kilka algorytmów** dla tych samych meczów
+5. **Backfilluj obserwowane mecze** przed tworzeniem kuponu
+6. **Trackuj wyniki w Analityce** - ucz się co działa
+7. **Eksportuj miesięczne raporty** - miej historię
+
+### ❌ Czego unikać
+
+1. **Nie importuj zbyt często** (limit API)
+2. **Nie analizuj zbyt wielu meczów naraz** (> 50)
+3. **Nie twórz kuponów bez weryfikacji**
+4. **Nie ignoruj statystyk w Analityce**
+5. **Nie polegaj tylko na jednym algorytmie**
+
+---
+
+## 12. CZĘSTO ZADAWANE PYTANIA (FAQ)
+
+### Q: Skąd pochodzą dane meczów?
+
+**A:** Z API Football (oficjalne API z danymi meczów z całego świata)
+
+### Q: Jak działają algorytmy wyszukiwania?
+
+**A:** Analizują historyczne statystyki drużyn (bramki, rożne, spalone, forma) i wyliczają prawdopodobieństwa
+
+### Q: Czy mogę dodać własne algorytmy?
+
+**A:** Obecnie nie, ale funkcja jest planowana w przyszłych wersjach
+
+### Q: Czy aplikacja działa offline?
+
+**A:** Nie, wymaga połączenia z internetem (do API i backendu)
+
+### Q: Czy dane są zapisywane lokalnie?
+
+**A:** Tak, w bazie danych backendu (PostgreSQL)
+
+### Q: Jak często aktualizować dane?
+
+**A:** Zalecamy codziennie lub co 2-3 dni
+
+### Q: Czy jest limit zapytań do API?
+
+**A:** Tak, API Football ma limity (sprawdź plan)
+
+### Q: Gdzie mogę zgłosić błąd?
+
+**A:** GitHub Issues lub kontakt z deweloperem
+
+---
+
+## 13. KONTAKT I WSPARCIE
+
+**Projekt:** Bet Assistant 2.0  
+**GitHub:** https://github.com/Norfeusz/bet-assisstant-2.0  
+**Wersja:** 1.0 (w trakcie migracji)
+
+**Pomoc techniczna:**
+
+- Otwórz GitHub Issues
+- Przeczytaj dokumentację techniczną
+- Sprawdź logi w konsoli (F12)
+
+---
+
+## 14. ZMIANY I AKTUALIZACJE
+
+### Wersja 1.0 (30 grudnia 2025)
+
+- ✅ Inicjalizacja projektu
+- ✅ Setup podstawowej struktury
+- ✅ Layout i nawigacja
+- ⏳ Implementacja funkcjonalności (w toku)
+
+### Planowane wersje
+
+- **1.1** - Import + Baza Danych (Q1 2025)
+- **1.2** - Wyszukiwarka Typów (Q1 2025)
+- **1.3** - Strefa Typera + Analityka (Q1 2025)
+- **2.0** - Dodatkowe funkcje (Q2 2025)
+
+---
+
+**Ostatnia aktualizacja:** 30 grudnia 2025  
+**Status:** Dokumentacja wstępna (aplikacja w trakcie migracji)
+
+---
+
+## INFORMACJA WAŻNA
+
+⚠️ **Aplikacja jest obecnie w trakcie migracji z vanilla JavaScript na React + TypeScript.**
+
+Część opisanych funkcji może być jeszcze **niezaimplementowana** i pojawi się w kolejnych aktualizacjach.
+
+Obecny stan:
+
+- ✅ Podstawowa struktura i nawigacja
+- ⏳ Funkcjonalności zakładek (w implementacji)
+
+Ta instrukcja będzie **regularnie aktualizowana** w miarę postępu prac.

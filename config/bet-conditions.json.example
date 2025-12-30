@@ -1,0 +1,53 @@
+{
+  "description": "Przykładowa konfiguracja warunków weryfikacji zakładów - KROK 29",
+  "betConditions": [
+    {
+      "betType": "1",
+      "description": "Wygrana gospodarzy",
+      "homeResult": "home_goals",
+      "awayResult": "away_goals",
+      "condition": "homeGoals > awayGoals"
+    },
+    {
+      "betType": "new_bet_type",
+      "description": "Nowy typ zakładu - przykład",
+      "homeResult": "home_shots",
+      "awayResult": "away_shots",
+      "condition": "homeShots + awayShots > threshold",
+      "note": "Aby dodać nowy typ zakładu, skopiuj ten szablon i dostosuj"
+    }
+  ],
+  "notes": [
+    "=== JAK DODAĆ NOWY TYP ZAKŁADU ===",
+    "1. Skopiuj jeden z istniejących wpisów z bet-conditions.json",
+    "2. Zmień 'betType' na nazwę używaną w systemie (np. 'cards_over')",
+    "3. Opcjonalnie dodaj 'betOption' jeśli typ ma warianty (np. 'tak'/'nie')",
+    "4. Ustaw 'homeResult' i 'awayResult' na pola z bazy danych:",
+    "   - home_goals, away_goals",
+    "   - home_corners, away_corners",
+    "   - home_offsides, away_offsides",
+    "   - home_shots, away_shots",
+    "   - home_shots_on_target, away_shots_on_target",
+    "   - home_possession, away_possession",
+    "   - użyj '-' jeśli kolumna ma być pusta",
+    "5. Napisz 'condition' - warunek JavaScript zwracający true/false:",
+    "   - Dostępne zmienne: homeGoals, awayGoals, homeCorners, awayCorners, homeOffsides, awayOffsides, threshold",
+    "   - threshold = wartość z kolumny 'typ' (betOption) jako liczba",
+    "   - Przykłady:",
+    "     'homeGoals > awayGoals' - gospodarze wygrali",
+    "     'homeCorners + awayCorners > threshold' - suma rożnych > próg",
+    "     'homeGoals > 0 && awayGoals > 0' - oba zespoły strzeliły",
+    "6. Opcjonalnie dodaj 'aliases' dla alternatywnych nazw tego samego zakładu",
+    "7. Zapisz plik i zrestartuj serwer",
+    "",
+    "=== STRUKTURA POLA ===",
+    "betType (wymagane) - nazwa typu zakładu",
+    "betOption (opcjonalne) - konkretna wartość opcji (np. 'tak', 'nie')",
+    "description - opis dla dokumentacji",
+    "homeResult - pole z bazy dla kolumny 'Wynik H'",
+    "awayResult - pole z bazy dla kolumny 'Wynik A'",
+    "condition - warunek JavaScript do weryfikacji",
+    "aliases - tablica alternatywnych nazw",
+    "note - dodatkowa notatka"
+  ]
+}

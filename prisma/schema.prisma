@@ -1,0 +1,215 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model matches {
+  id                   Int                @id @default(autoincrement())
+  fixture_id           Int?               @unique
+  match_date           DateTime           @db.Date
+  country              String             @db.VarChar(100)
+  league               String             @db.VarChar(150)
+  home_team            String             @db.VarChar(100)
+  away_team            String             @db.VarChar(100)
+  result               match_result_enum?
+  home_goals           Int?               @default(0)
+  away_goals           Int?               @default(0)
+  home_shots           Int?               @default(0)
+  home_shots_on_target Int?               @default(0)
+  away_shots           Int?               @default(0)
+  away_shots_on_target Int?               @default(0)
+  home_corners         Int?               @default(0)
+  away_corners         Int?               @default(0)
+  home_offsides        Int?               @default(0)
+  away_offsides        Int?               @default(0)
+  home_y_cards         Int?               @default(0)
+  away_y_cards         Int?               @default(0)
+  home_r_cards         Int?               @default(0)
+  away_r_cards         Int?               @default(0)
+  home_possession      Decimal?           @default(0.00) @db.Decimal(5, 2)
+  away_possession      Decimal?           @default(0.00) @db.Decimal(5, 2)
+  home_fouls           Int?               @default(0)
+  away_fouls           Int?               @default(0)
+  home_odds            Decimal?           @db.Decimal(6, 2)
+  draw_odds            Decimal?           @db.Decimal(6, 2)
+  away_odds            Decimal?           @db.Decimal(6, 2)
+  standing_home        Int?
+  standing_away        Int?
+  created_at           DateTime?          @default(now()) @db.Timestamp(6)
+  home_xg              Decimal?           @db.Decimal(5, 2)
+  away_xg              Decimal?           @db.Decimal(5, 2)
+  home_goals_ht        Int?               @default(0)
+  away_goals_ht        Int?               @default(0)
+  result_ht            String?            @db.VarChar(10)
+  is_finished          String?            @default("yes") @db.VarChar(3)
+
+  @@index([country, league], map: "idx_matches_country_league")
+  @@index([created_at], map: "idx_matches_created_at")
+  @@index([match_date], map: "idx_matches_date")
+  @@index([home_team, away_team], map: "idx_matches_teams")
+  @@index([fixture_id], map: "idx_matches_fixture_id")
+}
+
+model import_jobs {
+  id                   Int             @id @default(autoincrement())
+  leagues              Json
+  date_from            DateTime        @db.Date
+  date_to              DateTime        @db.Date
+  status               job_status_enum @default(in_queue)
+  progress             Json?           @default("{}")
+  total_matches        Int?            @default(0)
+  imported_matches     Int?            @default(0)
+  failed_matches       Int?            @default(0)
+  rate_limit_remaining Int?            @default(7500)
+  rate_limit_reset_at  DateTime?       @db.Timestamptz(6)
+  error_message        String?
+  started_at           DateTime?       @db.Timestamptz(6)
+  completed_at         DateTime?       @db.Timestamptz(6)
+  created_at           DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime        @default(now()) @db.Timestamptz(6)
+  hidden               Boolean?        @default(false)
+  job_type             job_type_enum   @default(new_matches)
+
+  @@index([status])
+  @@index([created_at(sort: Desc)])
+  @@index([job_type], map: "idx_import_jobs_job_type")
+}
+
+enum match_result_enum {
+  h_win @map("h-win")
+  draw
+  a_win @map("a-win")
+}
+
+enum job_status_enum {
+  in_queue
+  pending
+  running
+  paused
+  completed
+  failed
+  rate_limited
+}
+
+enum job_type_enum {
+  new_matches
+  update_results
+}
+
+model bets {
+  id                    Int       @id @default(autoincrement())
+  // A-G: Basic match and bet info
+  home_team             String    @db.VarChar(100)        // A
+  away_team             String    @db.VarChar(100)        // B
+  bet_type              String    @db.VarChar(50)         // C
+  bet_option            String    @db.VarChar(50)         // D
+  szanse                String?   @db.VarChar(50)         // E
+  odds                  Decimal?  @db.Decimal(6, 2)       // F
+  moc_bet               Decimal?  @db.Decimal(8, 2)       // G
+  // H-S: Statistics (5/10/15 matches, overall/h-a)
+  stat_5_h_overall      String?   @db.VarChar(50)         // H
+  stat_5_a_overall      String?   @db.VarChar(50)         // I
+  stat_5_h_ha           String?   @db.VarChar(50)         // J
+  stat_5_a_ha           String?   @db.VarChar(50)         // K
+  stat_10_h_overall     String?   @db.VarChar(50)         // L
+  stat_10_a_overall     String?   @db.VarChar(50)         // M
+  stat_10_h_ha          String?   @db.VarChar(50)         // N
+  stat_10_a_ha          String?   @db.VarChar(50)         // O
+  stat_15_h_overall     String?   @db.VarChar(50)         // P
+  stat_15_a_overall     String?   @db.VarChar(50)         // Q
+  stat_15_h_ha          String?   @db.VarChar(50)         // R
+  stat_15_a_ha          String?   @db.VarChar(50)         // S
+  // T-X: Results and standings
+  entered               String?   @db.VarChar(10)         // T
+  result_home           Int?                              // U
+  result_away           Int?                              // V
+  standing_home         Int?                              // W
+  standing_away         Int?                              // X
+  // Y-AB: Additional info
+  comment               String?   @db.Text                // Y
+  country               String?   @db.VarChar(100)        // Z
+  league                String?   @db.VarChar(150)        // AA
+  match_date            DateTime? @db.Date                // AB
+  // AC-AG: Links and ID
+  superbet_link         String?   @db.VarChar(500)        // AC/AF
+  match_id              Int?                              // AD
+  flashscore_link       String?   @db.VarChar(500)        // AG
+  // System fields
+  created_at            DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@index([match_id])
+  @@index([match_date])
+  @@index([created_at(sort: Desc)])
+}
+
+model coupons {
+  id                    Int       @id @default(autoincrement())
+  // A-G: Basic match and bet info
+  home_team             String    @db.VarChar(100)        // A
+  away_team             String    @db.VarChar(100)        // B
+  bet_type              String    @db.VarChar(50)         // C
+  bet_option            String    @db.VarChar(50)         // D
+  szanse                String?   @db.VarChar(50)         // E
+  odds                  Decimal?  @db.Decimal(6, 2)       // F
+  moc_bet               Decimal?  @db.Decimal(8, 2)       // G
+  // H-S: Statistics (5/10/15 matches, overall/h-a)
+  stat_5_h_overall      String?   @db.VarChar(50)         // H
+  stat_5_a_overall      String?   @db.VarChar(50)         // I
+  stat_5_h_ha           String?   @db.VarChar(50)         // J
+  stat_5_a_ha           String?   @db.VarChar(50)         // K
+  stat_10_h_overall     String?   @db.VarChar(50)         // L
+  stat_10_a_overall     String?   @db.VarChar(50)         // M
+  stat_10_h_ha          String?   @db.VarChar(50)         // N
+  stat_10_a_ha          String?   @db.VarChar(50)         // O
+  stat_15_h_overall     String?   @db.VarChar(50)         // P
+  stat_15_a_overall     String?   @db.VarChar(50)         // Q
+  stat_15_h_ha          String?   @db.VarChar(50)         // R
+  stat_15_a_ha          String?   @db.VarChar(50)         // S
+  // T-X: Results and standings
+  entered               String?   @db.VarChar(10)         // T
+  result_home           Int?                              // U
+  result_away           Int?                              // V
+  standing_home         Int?                              // W
+  standing_away         Int?                              // X
+  // Y-AB: Additional info
+  comment               String?   @db.Text                // Y
+  country               String?   @db.VarChar(100)        // Z
+  league                String?   @db.VarChar(150)        // AA
+  match_date            DateTime? @db.Date                // AB
+  // AC-AG: Links and ID
+  superbet_link         String?   @db.VarChar(500)        // AC/AF
+  match_id              Int?                              // AD
+  // AE: Coupon specific
+  coupon_id             String?   @db.VarChar(20)         // AE
+  flashscore_link       String?   @db.VarChar(500)        // AG
+  // AH-AI: Financial
+  stake                 Decimal?  @db.Decimal(10, 2)      // AH
+  potential_win         Decimal?  @db.Decimal(10, 2)      // AI
+  // System fields
+  created_at            DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@index([coupon_id])
+  @@index([match_id])
+  @@index([match_date])
+  @@index([created_at(sort: Desc)])
+}
+
+model leagues {
+  id         Int       @id
+  name       String    @db.VarChar(150)
+  country    String    @db.VarChar(100)
+  is_choosen String?   @default("no") @db.VarChar(3)
+  created_at DateTime? @default(now()) @db.Timestamp(6)
+  updated_at DateTime? @default(now()) @db.Timestamp(6)
+
+  @@unique([name, country])
+  @@index([is_choosen])
+  @@index([country])
+}

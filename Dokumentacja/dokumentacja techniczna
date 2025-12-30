@@ -1,0 +1,805 @@
+# DOKUMENTACJA TECHNICZNA - BET ASSISTANT 2.0
+
+**Data aktualizacji:** 30 grudnia 2025  
+**Wersja:** 1.0 (Inicjalizacja projektu)
+
+---
+
+## 1. ARCHITEKTURA PROJEKTU
+
+### 1.1 Struktura katalogów
+
+```
+D:\narzędzia\Bet Assistant 2.0\
+├── Dokumentacja/
+│   ├── Instrukcje - agenci/
+│   │   └── Migracja.txt          # Zadania do wykonania
+│   ├── dokumentacja techniczna     # Ten plik
+│   ├── instrukcja obsługi          # Przewodnik użytkownika
+│   └── instrukcje dla agentów      # Workflow dla AI agentów
+│
+├── config/                        # Konfiguracja backendu
+│   ├── google-sheets-config.json # Google Sheets API
+│   └── bet-conditions.json       # Warunki zakładów
+│
+├── node_modules/                   # Zależności (nie w Git)
+│
+├── prisma/                        # Database schema (PostgreSQL)
+│   ├── schema.prisma             # Definicja schematu
+│   └── migrations/               # Historia migracji DB
+│
+├── public/                         # Statyczne assety
+│   └── (do dodania)
+│
+├── server/                        # Backend (Express + Prisma)
+│   ├── routes/                   # API endpoints
+│   │   ├── analytics.ts         # /api/analytics/*
+│   │   ├── import-jobs.ts       # /api/import-jobs/*
+│   │   ├── strefa-typera.ts     # /api/strefa-typera/*
+│   │   └── verify-bets.ts       # /api/verify-bets/*
+│   │
+│   ├── scripts/                  # Utility scripts
+│   │   ├── backup-database.ts
+│   │   └── populate-leagues.ts
+│   │
+│   ├── src/                      # Backend source code
+│   │   ├── db/                  # Prisma client
+│   │   ├── models/              # Data models
+│   │   ├── services/            # Business logic
+│   │   │   ├── api-football-client.ts
+│   │   │   ├── data-importer.ts
+│   │   │   └── league-selector.ts
+│   │   ├── types/               # TypeScript types
+│   │   └── utils/               # Helper functions
+│   │
+│   ├── utils/                    # Backend utilities
+│   │   ├── backup-tables.ts
+│   │   └── bet-statistics.ts
+│   │
+│   ├── background-import-worker.ts  # Worker process
+│   └── league-config-server.ts      # Main server file
+│
+├── src/                           # Frontend (React + TypeScript)
+│   ├── api/                       # Komunikacja z backendem
+│   │   └── client.ts             # Axios/Fetch client, base config
+│   │
+│   ├── components/                # Reużywalne komponenty React
+│   │   ├── Layout.tsx            # Główny layout z nawigacją
+│   │   └── Layout.module.css     # Style dla Layout
+│   │
+│   ├── hooks/                     # Custom React hooks
+│   │   └── (puste - do implementacji)
+│   │
+│   ├── pages/                     # Strony aplikacji (routing)
+│   │   ├── ImportPage.tsx        # Zakładka Import
+│   │   ├── DatabasePage.tsx      # Zakładka Baza Danych
+│   │   ├── BetFinderPage.tsx     # Zakładka Wyszukiwarka Typów
+│   │   ├── StrefaTyperaPage.tsx  # Zakładka Strefa Typera
+│   │   └── AnalyticsPage.tsx     # Zakładka Analityka
+│   │
+│   ├── store/                     # Zustand global state
+│   │   └── appStore.ts           # Główny store aplikacji
+│   │
+│   ├── styles/                    # Globalne style
+│   │   └── global.css            # CSS variables, resets, typography
+│   │
+│   ├── types/                     # TypeScript definicje
+│   │   └── index.ts              # Główne typy aplikacji
+│   │
+│   ├── utils/                     # Funkcje pomocnicze
+│   │   └── (puste - do implementacji)
+│   │
+│   ├── App.tsx                    # Root component, routing setup
+│   ├── main.tsx                   # Entry point, React render
+│   └── vite-env.d.ts             # Vite type definitions
+│
+├── stary/                         # Stary projekt (referencja - do usunięcia)
+│   └── (cały poprzedni kod)
+│
+├── .env                           # Environment variables (NIE w Git!)
+├── .gitignore                     # Git ignore rules
+├── index.html                     # HTML entry point
+├── package.json                   # Dependencies & scripts
+├── package-lock.json              # Lock file
+├── README-URUCHOMIENIE.md         # Instrukcja launcherów
+├── start.bat                      # Launcher frontendu
+├── start-all.bat                  # Launcher backend + frontend
+├── tsconfig.json                  # TypeScript config (frontend)
+├── tsconfig.node.json             # TypeScript config (Vite)
+├── tsconfig.server.json           # TypeScript config (backend)
+├── vite.config.ts                 # Vite configuration
+└── INSTRUKCJE_MIGRACJI.txt       # Plan migracji (z starego projektu)
+```
+
+---
+
+## 2. SZCZEGÓŁOWY OPIS PLIKÓW
+
+### 2.1 Pliki konfiguracyjne (root)
+
+#### `package.json`
+
+**Odpowiedzialność:** Definicja projektu, dependencies, scripts
+**Kluczowe zależności:**
+
+```json
+{
+  "react": "18.3.1",
+  "react-dom": "18.3.1",
+  "react-router-dom": "6.30.2",
+  "@tanstack/react-query": "5.90.15",
+  "zustand": "5.0.9",
+  "vite": "5.4.21",
+  "typescript": "5.9.3"
+}
+```
+
+**Scripts:**
+
+- `npm run dev` - Uruchamia dev server (localhost:5173)
+- `npm run build` - Build produkcyjny
+- `npm run preview` - Preview buildu
+
+#### `vite.config.ts`
+
+**Odpowiedzialność:** Konfiguracja Vite
+**Kluczowe elementy:**
+
+```typescript
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    proxy: {
+      "/api": "http://localhost:3000", // Proxy do backendu
+    },
+  },
+});
+```
+
+#### `tsconfig.json`
+
+**Odpowiedzialność:** Konfiguracja TypeScript dla aplikacji
+**Kluczowe opcje:**
+
+- `strict: true` - Ścisły mode
+- `target: "ES2020"` - Target ES version
+- `jsx: "react-jsx"` - JSX transform
+
+---
+
+### 2.2 Entry Points
+
+#### `index.html`
+
+**Odpowiedzialność:** HTML entry point
+**Flow:**
+
+1. Ładuje `<div id="root">`
+2. Importuje `/src/main.tsx`
+
+#### `src/main.tsx`
+
+**Odpowiedzialność:** React render, providers setup
+**Flow:**
+
+1. Tworzy QueryClient (TanStack Query)
+2. Renderuje App w `<StrictMode>`
+3. Opakowuje w:
+   - QueryClientProvider
+   - BrowserRouter
+4. Importuje `global.css`
+
+**Kod:**
+
+```typescript
+ReactDOM.createRoot(document.getElementById("root")!).render(
+  <React.StrictMode>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </QueryClientProvider>
+  </React.StrictMode>
+);
+```
+
+#### `src/App.tsx`
+
+**Odpowiedzialność:** Root component, routing
+**Flow:**
+
+1. Renderuje `<Layout>` (nawigacja + header)
+2. Definiuje routes:
+   - `/` → BetFinderPage
+   - `/import` → ImportPage
+   - `/database` → DatabasePage
+   - `/bet-finder` → BetFinderPage
+   - `/strefa-typera` → StrefaTyperaPage
+   - `/analytics` → AnalyticsPage
+
+---
+
+### 2.3 Layout & Navigation
+
+#### `src/components/Layout.tsx`
+
+**Odpowiedzialność:** Główna struktura UI
+**Flow kliknięcia w zakładkę:**
+
+1. User klika zakładkę (np. "📥 Import")
+2. React Router zmienia URL (`/import`)
+3. `<Routes>` w App.tsx renderuje ImportPage
+4. Layout pozostaje (header + tabs)
+
+**Struktura:**
+
+```tsx
+<div className={styles.layout}>
+  <header className={styles.header}>
+    <h1>⚽ Bet Assistant 2.0</h1>
+  </header>
+
+  <nav className={styles.tabs}>
+    {tabs.map((tab) => (
+      <Link to={tab.path} className={active ? styles.active : ""}>
+        {tab.label}
+      </Link>
+    ))}
+  </nav>
+
+  <main className={styles.main}>
+    {children} {/* Tu renderują się strony */}
+  </main>
+</div>
+```
+
+**Tabs konfiguracja:**
+
+```typescript
+const tabs = [
+  { path: "/import", label: "📥 Import" },
+  { path: "/database", label: "🗄️ Baza Danych" },
+  { path: "/bet-finder", label: "🔍 Wyszukiwarka Typów" },
+  { path: "/strefa-typera", label: "📊 Strefa Typera" },
+  { path: "/analytics", label: "📈 Analityka" },
+];
+```
+
+#### `src/components/Layout.module.css`
+
+**Odpowiedzialność:** Style dla Layout
+**Kluczowe klasy:**
+
+- `.layout` - Flex container, min-height: 100vh
+- `.header` - Biały background, padding, shadow
+- `.tabs` - Flex row, gap, biały background
+- `.tabButton` - Style zakładek
+- `.tabButton.active` - Gradient dla aktywnej zakładki
+- `.main` - Główna zawartość, flex: 1
+
+---
+
+### 2.4 Pages (Strony)
+
+**Status:** Wszystkie strony są obecnie **placeholderami**
+
+#### `src/pages/ImportPage.tsx`
+
+**Obecny kod:**
+
+```tsx
+function ImportPage() {
+  return (
+    <div style={{ background: "white", padding: "40px", borderRadius: "12px" }}>
+      <h2>📥 Import</h2>
+      <p>Funkcjonalność będzie zmigrowana ze starego projektu</p>
+    </div>
+  );
+}
+```
+
+**Do implementacji (z `stary/public/js/app.js`):**
+
+- Lista krajów i lig
+- Wybór zakresu dat
+- Przycisk "Import"
+- Statystyki (liczba lig, meczów)
+- Kolejka importu
+- Background jobs display
+
+#### `src/pages/DatabasePage.tsx`
+
+**Do implementacji (z `stary/public/index.html` tab-database):**
+
+- Panel filtrów (kraj, liga, drużyna)
+- Search z autocomplete
+- Tabela wyników
+- Modal szczegółów meczu
+- Limity (5, 10, 20, all)
+
+#### `src/pages/BetFinderPage.tsx`
+
+**Do implementacji (z `stary/public/js/bet-finder.js` - 5562 linii!):**
+
+- Kontrolki (TOP wyników, limit meczów, zakres dat)
+- 15+ przycisków wyszukiwania (grupy: Bramki, Rożne, Spalone, etc.)
+- SearchQueue panel
+- Modal wyników (uniwersalny)
+- 15+ algorytmów analitycznych
+
+#### `src/pages/StrefaTyperaPage.tsx`
+
+**Do implementacji:**
+
+- Backfill section
+- Actions (accept, verify, create coupon)
+- Watched matches modal
+- Google Sheets integration
+
+#### `src/pages/AnalyticsPage.tsx`
+
+**Do implementacji (z `stary/public/analytics.html`):**
+
+- Summary cards
+- Filtry
+- Wykresy (Chart.js?)
+- Tabela statystyk
+- Export funkcjonalność
+
+---
+
+### 2.5 API Layer
+
+#### `src/api/client.ts`
+
+**Obecny stan:** Plik istnieje ale jest pusty
+**Do implementacji:**
+
+```typescript
+// Axios client z konfiguracją
+const apiClient = axios.create({
+  baseURL: "/api", // Proxy do localhost:3000
+  timeout: 10000,
+});
+
+// Funkcje API
+export const getLeagues = () => apiClient.get("/leagues");
+export const getMatches = (filters) =>
+  apiClient.get("/matches", { params: filters });
+// ... etc
+```
+
+---
+
+### 2.6 State Management
+
+#### `src/store/appStore.ts`
+
+**Obecny stan:** Plik istnieje ale jest pusty
+**Do implementacji (Zustand):**
+
+```typescript
+interface AppState {
+  // Globalne state (np. wybrane ligi, filtry)
+  selectedLeagues: number[];
+  dateRange: { from: string; to: string };
+  // Actions
+  setSelectedLeagues: (leagues: number[]) => void;
+  setDateRange: (range) => void;
+}
+
+export const useAppStore = create<AppState>((set) => ({
+  selectedLeagues: [],
+  dateRange: { from: "", to: "" },
+  setSelectedLeagues: (leagues) => set({ selectedLeagues: leagues }),
+  // ...
+}));
+```
+
+---
+
+### 2.7 Types
+
+#### `src/types/index.ts`
+
+**Obecny stan:** Plik istnieje ale jest pusty
+**Do implementacji:**
+
+```typescript
+// Główne typy z backendu
+export interface League {
+  id: number;
+  name: string;
+  country: string;
+  enabled: boolean;
+}
+
+export interface Match {
+  id: number;
+  homeTeam: string;
+  awayTeam: string;
+  date: string;
+  league: League;
+  // ... więcej pól
+}
+
+export interface BetType {
+  id: string;
+  name: string;
+  description: string;
+  algorithm: string;
+}
+
+// ... etc
+```
+
+---
+
+### 2.8 Styles
+
+#### `src/styles/global.css`
+
+**Odpowiedzialność:** Globalne style, CSS variables
+**Zawiera:**
+
+- CSS Reset (`* { margin: 0; padding: 0; }`)
+- CSS Variables (kolory, czcionki)
+- Body styles (gradient background)
+- Utility classes (loading, spinner)
+
+**CSS Variables:**
+
+```css
+:root {
+  --primary: #667eea;
+  --primary-dark: #5568d3;
+  --secondary: #764ba2;
+  --success: #48bb78;
+  --danger: #f56565;
+  --gray-100: #f3f4f6;
+  --gray-600: #4b5563;
+  --gray-900: #111827;
+}
+```
+
+---
+
+## 3. FLOW DANYCH
+
+### 3.1 Render Flow (Startup)
+
+```
+index.html
+  └─> src/main.tsx
+       ├─> QueryClientProvider setup
+       ├─> BrowserRouter setup
+       └─> <App />
+            └─> <Layout>
+                 ├─> Header
+                 ├─> Navigation Tabs
+                 └─> <Routes>
+                      └─> Current Page Component
+```
+
+### 3.2 Navigation Flow
+
+```
+User clicks tab
+  └─> React Router <Link>
+       └─> URL changes (e.g. /import)
+            └─> <Routes> matches path
+                 └─> Renders ImportPage
+                      └─> Wrapped in Layout (persistent)
+```
+
+### 3.3 API Call Flow (do implementacji)
+
+```
+Component
+  └─> useQuery (TanStack Query)
+       └─> api/client.ts function
+            └─> Axios request
+                 └─> Vite proxy /api → localhost:3000
+                      └─> Backend (Express)
+                           └─> Response
+                                └─> TanStack Query cache
+                                     └─> Component re-render
+```
+
+---
+
+## 4. KLUCZOWE PLIKI DO MIGRACJI
+
+### 4.1 Z starego projektu (`./stary/`)
+
+**Najważniejsze źródła:**
+
+1. **`stary/public/js/bet-finder.js`** (5562 linii!)
+
+   - 15+ algorytmów wyszukiwania
+   - Search queue logic
+   - Modal configuration
+   - **→ Migrować do:** `src/pages/BetFinderPage.tsx` + utils
+
+2. **`stary/public/js/app.js`**
+
+   - Import logic
+   - League management
+   - **→ Migrować do:** `src/pages/ImportPage.tsx`
+
+3. **`stary/public/js/watched-matches.js`**
+
+   - Watched matches modal
+   - **→ Migrować do:** `src/components/WatchedMatches.tsx`
+
+4. **`stary/public/js/search-queue.js`**
+
+   - Search queue panel
+   - **→ Migrować do:** `src/hooks/useSearchQueue.ts`
+
+5. **`stary/public/js/config/state.js`**
+
+   - Global state
+   - **→ Migrować do:** `src/store/appStore.ts`
+
+6. **`stary/public/js/api/*.js`**
+
+   - API calls
+   - **→ Migrować do:** `src/api/client.ts`
+
+7. **`stary/public/js/utils/*.js`**
+
+   - Utility functions
+   - **→ Migrować do:** `src/utils/`
+
+8. **`stary/public/css/*.css`**
+   - Styles
+   - **→ Migrować do:** CSS Modules lub `global.css`
+
+---
+
+## 5. TECHNOLOGIE I BIBLIOTEKI
+
+### 5.1 Core Stack
+
+**React 18.3.1**
+
+- Komponenty funkcyjne
+- Hooks (useState, useEffect, custom hooks)
+- JSX/TSX syntax
+
+**TypeScript 5.9.3**
+
+- Strict mode enabled
+- Type safety dla wszystkich komponentów
+- Interfaces dla danych z API
+
+**Vite 5.4.21**
+
+- Dev server (HMR - Hot Module Replacement)
+- Build tool (Rollup pod spodem)
+- Proxy `/api` → `localhost:3000`
+
+### 5.2 Routing & State
+
+**React Router 6.30.2**
+
+- `<BrowserRouter>` - client-side routing
+- `<Routes>` + `<Route>` - ścieżki
+- `<Link>` - nawigacja
+- `useLocation()` - aktywna zakładka
+
+**Zustand 5.0.9**
+
+- Lightweight state management
+- Prostsza alternatywa dla Redux
+- `create()` - tworzenie store
+- Hooks: `useAppStore()`
+
+**TanStack Query 5.90.15**
+
+- Server state management
+- Auto caching
+- Auto refetching
+- `useQuery()` - fetch data
+- `useMutation()` - POST/PUT/DELETE
+
+### 5.3 Styling
+
+**CSS Modules**
+
+- Scoped CSS dla komponentów
+- `import styles from './Component.module.css'`
+- `className={styles.button}`
+
+**Global CSS**
+
+- CSS Variables (`--primary`, etc.)
+- Reset styles
+- Typography
+
+---
+
+## 6. BACKEND API (SKOPIOWANY Z STAREGO PROJEKTU)
+
+**Lokalizacja:** `server/` (skopiowany ze `stary/`)
+**Base URL:** `http://localhost:3000`
+**Proxy:** Vite przekierowuje `/api/*` → `localhost:3000`
+**Status:** ✅ Niezależny od folderu `stary/`
+
+### Struktura API:
+
+**Import Jobs:**
+
+- `GET /api/import-jobs` - lista zadań importu
+- `POST /api/import-jobs` - utwórz nowe zadanie
+- `DELETE /api/import-jobs/:id` - usuń zadanie
+
+**Leagues:**
+
+- `GET /api/leagues` - wszystkie ligi
+- `POST /api/leagues/enable` - włącz ligę
+- `GET /api/matches?country=X&league=Y` - filtrowane mecze
+
+**Strefa Typera:**
+
+- `GET /api/strefa-typera/matches` - obserwowane mecze
+- `POST /api/strefa-typera/backfill` - uzupełnij dane
+- `GET /api/strefa-typera/google-sheets` - sync z arkuszem
+
+**Analytics:**
+
+- `GET /api/analytics/summary` - statystyki zakładów
+- `GET /api/analytics/bets` - historia zakładów
+
+**Verify Bets:**
+
+- `POST /api/verify-bets` - weryfikacja zakładów
+
+### Tech Stack (backend):
+
+- **Express 5.1.0** - serwer HTTP
+- **Prisma 6.18.0** - ORM
+- **PostgreSQL** - baza danych
+- **Node.js 24.11.1** - runtime
+- **tsx** - TypeScript execution
+- **nodemon** - auto-reload podczas development
+
+### Pliki konfiguracyjne:
+
+- `.env` - zmienne środowiskowe (DATABASE_URL, API_FOOTBALL_KEY, etc.)
+- `config/google-sheets-config.json` - konfiguracja Google Sheets API
+- `config/bet-conditions.json` - warunki zakładów
+- `prisma/schema.prisma` - schema bazy danych
+
+---
+
+## 7. DEVELOPMENT WORKFLOW
+
+### 7.1 Uruchomienie projektu
+
+```bash
+cd "D:\narzędzia\Bet Assistant 2.0"
+npm run dev
+```
+
+**Rezultat:** Vite dev server na `http://localhost:5173`
+
+### 7.2 Build produkcyjny
+
+```bash
+npm run build
+```
+
+**Rezultat:** Pliki w folderze `/dist`
+
+### 7.3 Preview buildu
+
+```bash
+npm run preview
+```
+
+### 7.4 TypeScript check
+
+```bash
+npx tsc --noEmit
+```
+
+---
+
+## 8. GIT & GITHUB
+
+**Repository:** https://github.com/Norfeusz/bet-assisstant-2.0.git  
+**Branch:** main
+
+### Struktura commitów:
+
+```
+feat: dodaj nową funkcjonalność
+fix: napraw bug
+refactor: refaktoryzacja
+docs: aktualizacja dokumentacji
+style: formatowanie
+```
+
+---
+
+## 9. PLAN IMPLEMENTACJI (Etapy)
+
+**Status:** ✅ Etap 0 - Setup (ukończony)
+
+### Etap 1: Infrastruktura (NASTĘPNY)
+
+- `src/api/client.ts` - API client
+- `src/types/index.ts` - TypeScript types
+- `src/store/appStore.ts` - Zustand store
+- `src/utils/` - utility functions
+
+### Etap 2: Komponenty współdzielone
+
+- Modal component
+- Table component
+- Form components
+- Toast notifications
+
+### Etap 3-7: Strony
+
+- Import Page
+- Database Page
+- **Bet Finder Page** (najważniejsze!)
+- Strefa Typera Page
+- Analytics Page
+
+### Etap 8-10: Polish & Testing
+
+- Style
+- Backend integration
+- Testy i bugfixy
+
+---
+
+## 10. AKTUALIZACJE
+
+**30 grudnia 2025 - 15:56:**
+
+- ✅ Inicjalizacja projektu (Vite + React + TypeScript)
+- ✅ Setup routing (5 stron z placeholderami)
+- ✅ Layout z nawigacją
+- ✅ Git + GitHub integration
+- ✅ Dokumentacja (3 pliki)
+- ✅ **Launcher** - start.bat i start-all.bat
+- ✅ **Backend skopiowany** ze `stary/` do `server/`
+- ✅ **Prisma** - schema i migracje skopiowane
+- ✅ **Config** - .env i config/ skopiowane
+- ✅ **Dependencies** - backend packages zainstalowane
+- ✅ **Backend działa** niezależnie na localhost:3000
+
+**Następny krok:** Etap 1 - Infrastruktura frontendu (API client, types, store, utils)
+
+---
+
+## NOTATKI TECHNICZNE
+
+### Performance considerations:
+
+- React.memo dla często renderowanych komponentów
+- useMemo / useCallback dla drogich obliczeń
+- Code splitting (React.lazy) dla stron
+- TanStack Query caching dla API calls
+
+### Security considerations:
+
+- Backend obsługuje auth (jeśli jest)
+- Frontend nie przechowuje sensitywnych danych
+- HTTPS w produkcji
+
+### Browser support:
+
+- Modern browsers (Chrome, Firefox, Edge, Safari)
+- ES2020+ features
+- No IE11 support
+
+---
+
+**Ostatnia aktualizacja:** 30 grudnia 2025  
+**Autor dokumentacji:** AI Agent (Migracja)

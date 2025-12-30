@@ -1,0 +1,507 @@
+# INSTRUKCJE DLA AGENTÓW - BET ASSISTANT 2.0
+
+**Data aktualizacji:** 30 grudnia 2025
+
+---
+
+## 0. WPROWADZENIE W PROJEKT
+
+### 0.1 Czym jest Bet Assistant 2.0?
+
+**Bet Assistant 2.0** to zaawansowany system do analizy meczów piłkarskich i wyszukiwania okazji do typowania. Aplikacja pomaga użytkownikom:
+
+- Importować dane meczów z API Football
+- Analizować statystyki zespołów i rozgrywek
+- Wyszukiwać typy według 15+ algorytmów analitycznych
+- Zarządzać kuponami bukmacherskimi
+- Integrować się z Google Sheets
+- Generować raporty i statystyki
+
+### 0.2 Kontekst migracji
+
+Obecnie przeprowadzamy **pełną migrację** aplikacji:
+
+- **Z:** Vanilla JavaScript (stary projekt w folderze `./stary/`)
+- **Na:** React + TypeScript + Vite
+- **Backend:** Pozostaje BEZ ZMIAN (Express + Prisma + PostgreSQL na localhost:3000)
+
+### 0.3 Stan obecny (30 grudnia 2025)
+
+✅ **Co już mamy:**
+
+- Setup projektu (Vite + React + TypeScript)
+- Routing (React Router) z 5 stronami
+- State management (Zustand)
+- API layer (TanStack Query)
+- Konfiguracja proxy do backendu
+- Struktura folderów
+- Git + GitHub integration
+- Podstawowy Layout z nawigacją
+
+⏳ **Co przed nami:**
+
+- Migracja logiki biznesowej ze starego projektu
+- Implementacja 15+ algorytmów wyszukiwania typów
+- Komponenty UI (Modal, Table, Form, etc.)
+- Integracja z backendem
+- Wszystkie funkcjonalności z 5 zakładek
+
+### 0.4 Główne funkcjonalności aplikacji
+
+#### 📥 Import (zakładka 1)
+
+- Zarządzanie ligami (włączanie/wyłączanie)
+- Import meczów z API Football według zakresu dat
+- Wyświetlanie statystyk (liczba lig, meczów, krajów)
+- Kolejka zadań importu
+- Zadania w tle (background jobs)
+
+#### 🗄️ Baza Danych (zakładka 2)
+
+- Przeglądanie bazy meczów
+- Filtrowanie po: kraju, lidze, drużynie
+- Wyszukiwanie z autocomplete
+- Szczegóły meczu w modalu
+- Statystyki zespołów
+- Limity wyników (5, 10, 20, wszystkie)
+
+#### 🔍 Wyszukiwarka Typów (zakładka 3) - **NAJWAŻNIEJSZA**
+
+- 15+ algorytmów wyszukiwania (bramki, rożne, spalone, wyniki, itp.)
+- Zakres dat (dziś, jutro, pojutrze, custom)
+- TOP wyników (5, 10, 15, 20)
+- Limit meczów na wyszukiwanie
+- Kolejka wyszukiwań (SearchQueue)
+- Modal z wynikami (uniwersalny dla wszystkich typów)
+- Akcje: dodaj do Bet Builder, obserwuj mecz
+- Auto-dodawanie typów
+
+#### 📊 Strefa Typera (zakładka 4)
+
+- Backfill danych (uzupełnianie brakujących)
+- Akcje: accept, verify, create coupon
+- Obserwowane mecze (watched matches)
+- Uzupełnianie szans zespołów
+- Integracja z Google Sheets
+
+#### 📈 Analityka (zakładka 5)
+
+- Podsumowanie (total bets, wins, losses)
+- Filtry statystyk
+- Wykresy (success rate, ROI)
+- Tabela statystyk
+- Export danych
+
+### 0.5 Architektura techniczna
+
+#### Frontend (TO ROBIMY)
+
+```
+React 18.3.1          - UI components
+TypeScript 5.9.3      - Type safety
+Vite 5.4.21          - Build tool & dev server
+React Router 6.30.2   - Client-side routing
+Zustand 5.0.9        - Global state management
+TanStack Query 5.90  - Server state & caching
+CSS Modules          - Component styling
+```
+
+#### Backend (NIE ZMIENIAMY)
+
+```
+Express              - HTTP server
+Prisma               - ORM
+PostgreSQL           - Database
+localhost:3000       - API endpoint
+```
+
+#### Komunikacja
+
+```
+Frontend Vite Proxy: /api/* → http://localhost:3000
+```
+
+### 0.6 Kluczowe endpointy API
+
+**Ligi:**
+
+- `GET /api/leagues` - lista wszystkich lig
+- `POST /api/leagues/enable` - włącz ligę
+- `POST /api/leagues/disable` - wyłącz ligę
+- `GET /api/leagues/enabled` - włączone ligi
+
+**Mecze:**
+
+- `GET /api/matches` - lista meczów (z filtrami)
+- `GET /api/matches/:id` - szczegóły meczu
+- `POST /api/matches/import` - import meczów
+
+**Statystyki:**
+
+- `GET /api/stats/team/:name` - statystyki drużyny
+- `GET /api/stats/league/:id` - statystyki ligi
+
+**Bet Finder:**
+
+- `POST /api/bet-finder/search` - wyszukiwanie typów
+
+**Background Jobs:**
+
+- `GET /api/background-jobs` - lista zadań
+- `POST /api/background-jobs` - nowe zadanie
+- `PUT /api/background-jobs/:id` - update zadania
+
+**Analityka:**
+
+- `GET /api/analytics/summary` - podsumowanie
+- `GET /api/analytics/bets` - lista zakładów
+
+### 0.7 Referencja - stary projekt
+
+Cały stary kod znajduje się w folderze `./stary/`:
+
+```
+stary/
+├── public/
+│   ├── index.html           - główny HTML (wszystkie zakładki)
+│   ├── analytics.html       - strona analityki
+│   ├── js/
+│   │   ├── app.js          - główna logika Import
+│   │   ├── bet-finder.js   - 15+ algorytmów (5562 linii!)
+│   │   ├── watched-matches.js
+│   │   ├── search-queue.js
+│   │   ├── config/state.js - stan aplikacji
+│   │   ├── api/            - API calls
+│   │   ├── utils/          - utility functions
+│   │   └── ui/             - UI helpers
+│   └── css/                - style sheets
+└── server/                 - backend (NIE RUSZAMY)
+```
+
+**WAŻNE:** Stary projekt to referencja! Możesz z niego czerpać:
+
+- Logikę algorytmów
+- Nazwy funkcji
+- Flow UI
+- Strukturę danych
+
+### 0.8 Co powinieneś wiedzieć przed rozpoczęciem
+
+1. **Backend działa i jest gotowy** - nie musisz go konfigurować
+2. **Stary projekt działa** - możesz go uruchomić jako referencję
+3. **Mamy plan migracji** - 10 etapów (sekcja 12)
+4. **Priorytet: Bet Finder** - to najważniejsza funkcja (15+ algorytmów)
+5. **Pytaj gdy masz wątpliwości** - nie zgaduj!
+
+### 0.9 Twoja rola w projekcie
+
+Gdy zostaniesz przypisany do zadania, użytkownik powie:
+
+> "Witaj w Bet Assistant 2.0! Zapoznaj się z wprowadzeniem w pliku instrukcje dla agentów. Chcę abyś odpowiadał w projekcie za **[TWOJA ROLA]**"
+
+Przykładowe role:
+
+- **UI Components** - tworzenie reużywalnych komponentów (Modal, Table, Form)
+- **Import Page** - migracja zakładki Import
+- **Bet Finder** - implementacja algorytmów wyszukiwania
+- **API Integration** - integracja z backendem
+- **Testing** - testy i bugfixy
+
+Po takiej wiadomości:
+
+1. ✅ Przeczytaj **całe** to wprowadzenie (sekcja 0)
+2. ✅ Zapoznaj się z zasadami (sekcje 1-11)
+3. ✅ Sprawdź plan migracji (sekcja 12)
+4. ✅ Pytaj o szczegóły swojej roli
+5. ✅ Rozpocznij pracę!
+
+---
+
+## 1. PODSTAWOWE ZASADY PRACY
+
+### 1.1 Pytaj, gdy masz wątpliwości
+
+**KLUCZOWA ZASADA:** Jeśli na jakimkolwiek etapie masz wątpliwości, niejasności lub kilka możliwych interpretacji - **ZADAWAJ PYTANIA**.
+
+- ❌ NIE zgaduj intencji użytkownika
+- ❌ NIE zakładaj oczywistości
+- ❌ NIE podejmuj decyzji "na ślepo"
+- ✅ Pytaj o szczegóły implementacji
+- ✅ Pytaj o priorytety
+- ✅ Pytaj o oczekiwany rezultat
+- ✅ Pytaj, gdy coś jest niejasne
+
+**Przykłady sytuacji wymagających pytań:**
+
+- Nie wiesz, czy użytkownik chce modyfikować istniejący komponent czy stworzyć nowy
+- Masz kilka równoważnych sposobów implementacji
+- Nie jesteś pewien, jak nazwać zmienną/komponent/funkcję
+- Nie wiesz, gdzie umieścić nowy kod w strukturze
+- Instrukcja jest niejednoznaczna lub niepełna
+
+### 1.2 Rozumiej zanim działasz
+
+- Przeczytaj całe polecenie przed rozpoczęciem pracy
+- Analizuj kontekst i cel zadania
+- Sprawdź istniejący kod przed modyfikacją
+- Upewnij się, że rozumiesz zależności między komponentami
+
+---
+
+## 2. ZASADY KODOWANIA
+
+### 2.1 Minimalizm
+
+- Pisz tylko **niezbędny** kod
+- Unikaj nadmiarowej abstrakcji
+- Jeden plik = jedna odpowiedzialność
+- Krótkie, czytelne funkcje (max 50 linii)
+
+### 2.2 Brak duplikatów
+
+- Identyczny kod = wspólna funkcja/komponent
+- Podobny kod = rozważ parametryzację
+- Sprawdzaj czy funkcjonalność już istnieje przed tworzeniem nowej
+
+### 2.3 Struktura rozparcelowana
+
+- Każdy komponent w osobnym pliku
+- Logika biznesowa w `/utils/` lub `/hooks/`
+- Typy w `/types/`
+- API calls w `/api/`
+- Style w CSS Modules (`.module.css`)
+
+### 2.4 Schematy dla powtórzeń
+
+- Wykryj wzorce w kodzie
+- Twórz reużywalne komponenty
+- Używaj typów generycznych TypeScript
+- Konfiguracja zamiast hard-code
+
+---
+
+## 3. KONWENCJE NAZEWNICTWA
+
+### 3.1 Pliki
+
+- Komponenty: `PascalCase.tsx` (np. `MatchCard.tsx`)
+- Hooks: `camelCase.ts` z prefiksem `use` (np. `useSearchQueue.ts`)
+- Utils: `camelCase.ts` (np. `formatDate.ts`)
+- Typy: `PascalCase.ts` lub `index.ts`
+- Style: `ComponentName.module.css`
+
+### 3.2 Kod
+
+- Komponenty: `PascalCase`
+- Funkcje/zmienne: `camelCase`
+- Stałe: `UPPER_SNAKE_CASE`
+- Typy/Interfejsy: `PascalCase` z prefiksem `I` dla interface opcjonalnie
+- CSS classes: `kebab-case` lub `camelCase`
+
+---
+
+## 4. DOKUMENTACJA
+
+### 4.1 Obowiązek dokumentowania
+
+Przy **każdej zmianie** aktualizuj odpowiednie pliki:
+
+#### Dokumentacja techniczna
+
+- Opis struktury projektu
+- Mapa zależności między plikami
+- Flow: "Kliknięcie → Akcja → Pliki"
+- Architektura rozwiązań
+
+#### Instrukcja obsługi
+
+- Przewodnik użytkownika (bez kodu)
+- Krok po kroku funkcjonalności
+- Screenshots/opisy interfejsu
+
+#### Instrukcje dla agentów (ten plik)
+
+- Aktualizuj zasady workflow
+- Dodawaj nowe konwencje
+- Dokumentuj decyzje projektowe
+
+### 4.2 Format dokumentacji
+
+- Markdown (`.md`)
+- Przejrzysta struktura nagłówków
+- Kod w blokach ` ```typescript `
+- Listy punktowane dla jasności
+- Przykłady gdy potrzebne
+
+---
+
+## 5. GIT I COMMITY
+
+### 5.1 Zasady commitów
+
+- Commit po każdej logicznej zmianie
+- Format: `[typ]: opis` (np. `feat: add Match component`)
+- Typy: `feat`, `fix`, `refactor`, `docs`, `style`, `test`
+- Opis po polsku lub angielsku (konsekwentnie)
+
+### 5.2 Branch strategy
+
+- `main` - stabilna wersja
+- Feature branches dla większych zmian
+- Pull requesty dla code review (opcjonalnie)
+
+---
+
+## 6. STRUKTURA PROJEKTU
+
+```
+Bet Assistant 2.0/
+├── src/
+│   ├── api/              # API calls, klient HTTP
+│   ├── components/       # Reużywalne komponenty React
+│   ├── hooks/           # Custom React hooks
+│   ├── pages/           # Strony aplikacji (routing)
+│   ├── store/           # Zustand store (globalny state)
+│   ├── styles/          # Globalne style CSS
+│   ├── types/           # TypeScript types/interfaces
+│   ├── utils/           # Utility functions
+│   ├── App.tsx          # Root component
+│   └── main.tsx         # Entry point
+├── Dokumentacja/        # ZAWSZE AKTUALIZUJ!
+├── public/              # Static assets
+└── stary/              # Stary projekt (referencja)
+```
+
+---
+
+## 7. TECHNOLOGY STACK
+
+### 7.1 Frontend
+
+- **React 18.3.1** - UI library
+- **TypeScript** - Type safety
+- **Vite** - Build tool
+- **React Router 6** - Routing
+- **Zustand** - State management
+- **TanStack Query** - Server state
+- **CSS Modules** - Styling
+
+### 7.2 Backend (NIE ZMIENIAMY)
+
+- Express + Prisma + PostgreSQL
+- Endpoint: `localhost:3000`
+- Proxy w Vite: `/api/*`
+
+---
+
+## 8. WORKFLOW PRACY
+
+### 8.1 Przed rozpoczęciem
+
+1. Przeczytaj zadanie **w całości**
+2. Zadaj pytania jeśli coś niejasne
+3. Sprawdź istniejący kod
+4. Zaplanuj zmiany
+
+### 8.2 Podczas implementacji
+
+1. Implementuj małymi krokami
+2. Testuj na bieżąco (`npm run dev`)
+3. Commituj logiczne jednostki
+4. Aktualizuj dokumentację **na bieżąco**
+
+### 8.3 Po zakończeniu
+
+1. Sprawdź czy działa (`npm run dev`)
+2. Upewnij się że dokumentacja aktualna
+3. Verify TypeScript (`npm run build`)
+4. Commit + push
+
+---
+
+## 9. PRIORYTETY
+
+### Zawsze priorytet:
+
+1. **Działające rozwiązanie** > perfekcja
+2. **Prosty kod** > skomplikowany
+3. **Dokumentacja** > komentarze w kodzie
+4. **Pytania** > zgadywanie
+
+### Nigdy:
+
+- ❌ Duplikaty kodu
+- ❌ Nieużywany kod (dead code)
+- ❌ Nietestowane zmiany
+- ❌ Nieudokumentowane zmiany
+- ❌ Breaking changes bez konsultacji
+
+---
+
+## 10. KOMUNIKACJA
+
+### 10.1 Z użytkownikiem
+
+- Jasne, zwięzłe odpowiedzi
+- Potwierdzanie zrozumienia zadania
+- Regularny feedback o postępach
+- **Pytania gdy masz wątpliwości**
+
+### 10.2 Z innymi agentami
+
+- Sprawdzaj dokumentację przed pytaniem
+- Dokumentuj własne decyzje
+- Zostawiaj jasne komentarze dla przyszłych zmian
+
+---
+
+## 11. DEBUGGING
+
+### Gdy coś nie działa:
+
+1. Sprawdź konsoleę przeglądarki (F12)
+2. Sprawdź terminal Vite
+3. Sprawdź TypeScript errors
+4. Sprawdź czy backend działa (localhost:3000)
+5. Pytaj użytkownika o więcej informacji
+
+### Typowe problemy:
+
+- Import paths - sprawdź ścieżki
+- Type errors - dodaj/popraw typy
+- API errors - sprawdź backend
+- Style nie działają - sprawdź import CSS
+
+---
+
+## 12. ETAPY MIGRACJI (OBECNY PROJEKT)
+
+Projekt: Migracja z vanilla JS → React + TypeScript
+
+**Plan 10 etapów:**
+
+1. Infrastruktura (API, types, store, utils)
+2. Komponenty współdzielone (Modal, Table, Form)
+3. Import Tab
+4. Database Tab
+5. **Bet Finder Tab** (najważniejsze - 15+ algorytmów)
+6. Strefa Typera Tab
+7. Analytics Page
+8. Style i polish
+9. Integracja z backendem
+10. Testing i bugfixy
+
+**Szacowany czas:** 25-35 godzin
+
+---
+
+## OSTATNIA AKTUALIZACJA
+
+- **Data:** 30 grudnia 2025
+- **Wersja:** 1.0
+- **Status:** Inicjalizacja projektu - Git setup + GitHub integration
+- **Następny krok:** ETAP 1 - Infrastruktura
+
+---
+
+**PAMIĘTAJ:** Gdy masz wątpliwości - **PYTAJ!** 🤝

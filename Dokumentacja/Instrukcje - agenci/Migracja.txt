@@ -1,0 +1,1 @@
+1. Stwórz plik launcher - który jednym kliknięciem odpala nam server i frontend
