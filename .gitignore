@@ -35,6 +35,10 @@ dist-ssr
 # Prisma
 prisma/dev.db
 
+# Sensitive config files (use .example versions)
+config/google-sheets-config.json
+config/bet-conditions.json
+
 # Environment variables
 .env
 .env.local
