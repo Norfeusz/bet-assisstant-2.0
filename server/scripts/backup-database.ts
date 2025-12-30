@@ -208,8 +208,9 @@ export class DatabaseBackup {
 	}
 }
 
-// CLI usage
-if (require.main === module) {
+// CLI usage (ES module check)
+const isMainModule = import.meta.url === `file://${process.argv[1].replace(/\\/g, '/')}`
+if (isMainModule) {
 	const backup = new DatabaseBackup()
 	backup
 		.createBackup({

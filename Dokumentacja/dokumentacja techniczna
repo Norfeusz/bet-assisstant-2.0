@@ -620,43 +620,244 @@ Component
 
 ---
 
-## 6. BACKEND API (SKOPIOWANY Z STAREGO PROJEKTU)
+## 6. BACKEND API I WORKER
 
 **Lokalizacja:** `server/` (skopiowany ze `stary/`)
 **Base URL:** `http://localhost:3000`
 **Proxy:** Vite przekierowuje `/api/*` → `localhost:3000`
 **Status:** ✅ Niezależny od folderu `stary/`
 
-### Struktura API:
+### 6.1 Architektura Backend
+
+Backend składa się z **3 procesów**:
+
+1. **Express Server** (`league-config-server.ts`) - HTTP API
+2. **Import Worker** (`background-import-worker.ts`) - Przetwarzanie zadań importu w tle
+3. **PostgreSQL Database** (Prisma)
+
+```
+┌─────────────────────┐
+│   Frontend (React)  │
+│  localhost:5173     │
+└──────────┬──────────┘
+           │ /api/* requests
+           │ (proxied by Vite)
+           ↓
+┌─────────────────────┐       ┌──────────────────────┐
+│  Express Server     │◄──────┤  Import Worker       │
+│  localhost:3000     │       │  (Background)        │
+│  (API endpoints)    │       │                      │
+└──────────┬──────────┘       └─────────┬────────────┘
+           │                             │
+           │  Prisma ORM                 │  Prisma ORM
+           │                             │
+           ↓                             ↓
+┌──────────────────────────────────────────────────┐
+│         PostgreSQL Database                      │
+│  (import_jobs, matches, leagues, ...)            │
+└──────────────────────────────────────────────────┘
+           ↑
+           │ API calls
+           │
+┌──────────┴──────────┐
+│  API-Football.com   │
+│  (External API)     │
+└─────────────────────┘
+```
+
+### 6.2 Import Worker - Jak działa?
+
+**Plik:** `server/background-import-worker.ts` (588 linii)
+**Odpowiedzialność:** Przetwarzanie zadań importu w tle
+
+#### Lifecycle:
+
+1. **Start:** Worker startuje i od razu sprawdza zadania
+2. **Check Loop:** Co 5 minut sprawdza bazę w poszukiwaniu zadań do przetworzenia
+3. **Job Processing:** Przetwarza **jedno zadanie na raz** (lock: `processingJobId`)
+4. **Auto Resume:** Po zakończeniu zadania natychmiast sprawdza kolejne (nie czeka 5 minut)
+
+#### Priorytety zadań:
+
+```sql
+-- Worker wybiera zadania w kolejności:
+1. rate_limited jobs (rate_limit_reset_at < NOW()) -- Najwyższy priorytet
+2. pending jobs (jeśli brak running/rate_limited)  -- Niższy priorytet
+```
+
+#### Flow przetwarzania:
+
+```
+Worker.checkAndProcessJobs()
+  │
+  ├─> Sprawdź lock (processingJobId)
+  │   └─> Jeśli zajęty → skip
+  │
+  ├─> Query SQL: znajdź zadanie do przetworzenia
+  │   └─> rate_limited (ready) OR pending (if no active jobs)
+  │
+  ├─> Ustaw lock (processingJobId = job.id)
+  │
+  ├─> processJob(job)
+  │   │
+  │   ├─> Dla każdej ligi:
+  │   │   │
+  │   │   ├─> Dla każdej daty w zakresie:
+  │   │   │   │
+  │   │   │   ├─> ApiFootballClient.getFixtures()
+  │   │   │   │   └─> GET api-football.com/v3/fixtures
+  │   │   │   │
+  │   │   │   ├─> Rate limit check
+  │   │   │   │   └─> Jeśli 429 → status='rate_limited', rate_limit_reset_at = +1h
+  │   │   │   │
+  │   │   │   └─> DataImporter.processFixtures()
+  │   │   │       └─> INSERT/UPDATE matches w PostgreSQL
+  │   │   │
+  │   │   └─> Oznacz ligę jako completed
+  │   │
+  │   ├─> Status update: 'completed' lub 'failed'
+  │   │
+  │   └─> DatabaseBackup.autoBackup() (jeśli job_type = new_matches)
+  │
+  ├─> Zwolnij lock (processingJobId = null)
+  │
+  └─> setImmediate(() => checkAndProcessJobs())  // Sprawdź kolejne zadanie NATYCHMIAST
+```
+
+#### Rate Limiting:
+
+Worker obsługuje limity API:
+
+- **API-Football limit:** 100 requestów / dzień (darmowy plan)
+- **Rate limit detection:** HTTP 429 response
+- **Auto resume:** Worker zapisuje `rate_limit_reset_at = NOW() + 1 hour`
+- **Next check:** Worker sprawdza co 5 minut czy `rate_limit_reset_at < NOW()`
+- **Resume:** Automatycznie wznawia zadanie po upływie czasu
+
+#### Logging:
+
+- **Console:** Real-time logs w terminalu
+- **File:** `logs/import-YYYY-MM-DD.log`
+- **Email:** Powiadomienia o zakończeniu/błędzie (jeśli SMTP skonfigurowane)
+
+#### Przykładowe logi:
+
+```
+🚀 Background Import Worker started
+📁 Logs directory: D:\narzędzia\Bet Assistant 2.0\logs
+⏰ Checking for jobs every 5 minutes...
+
+🔍 Checking for pending jobs...
+✅ Found job #12 to process
+📝 Processing job #12 (new_matches)
+  🏆 League: Premier League (39)
+    📅 2025-01-01: 5 fixtures imported
+    📅 2025-01-02: 3 fixtures imported
+  ✅ League completed (39)
+  🏆 League: La Liga (140)
+    📅 2025-01-01: 4 fixtures imported
+    ⏸️  Rate limit hit! Reset at: 2025-12-30 17:00:00
+💾 Job #12 paused (rate_limited)
+🔍 Job finished, checking for next job in queue...
+💤 No jobs to process
+```
+
+#### Uruchomienie:
+
+```bash
+# Osobno (terminal)
+npm run server:worker
+
+# Razem z backendem i frontendem
+start-all.bat  # Uruchamia wszystkie 3 procesy
+
+# Tylko worker
+scripts\start-worker.bat
+```
+
+### 6.3 Struktura API:
 
 **Import Jobs:**
 
 - `GET /api/import-jobs` - lista zadań importu
+  - Query params: `showHidden=true/false`
+  - Response: `ImportJob[]`
 - `POST /api/import-jobs` - utwórz nowe zadanie
+  - Body: `{ leagueIds: number[], dateFrom: string, dateTo: string, jobType: 'new_matches' | 'update_results' }`
+  - Response: `{ success: true, jobId: number }`
 - `DELETE /api/import-jobs/:id` - usuń zadanie
+- `POST /api/import-jobs/:id/retry` - ponów próbę zadania
+- `POST /api/import-jobs/:id/clone` - sklonuj zadanie
 
-**Leagues:**
+**Import Job Schema:**
 
-- `GET /api/leagues` - wszystkie ligi
-- `POST /api/leagues/enable` - włącz ligę
-- `GET /api/matches?country=X&league=Y` - filtrowane mecze
+```typescript
+interface ImportJob {
+  id: number
+  leagues: number[]                    // Array league IDs
+  date_from: string                    // YYYY-MM-DD
+  date_to: string                      // YYYY-MM-DD
+  job_type: 'new_matches' | 'update_results'
+  status: 'in_queue' | 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'rate_limited'
+  progress: {
+    current_league?: number
+    current_date?: string
+    completed_leagues?: number[]       // Array completed league IDs
+  }
+  total_matches: number
+  imported_matches: number
+  failed_matches: number
+  rate_limit_remaining: number
+  rate_limit_reset_at: string | null   // ISO timestamp
+  error_message?: string
+  created_at: string                   // ISO timestamp
+  started_at?: string
+}
+```
 
-**Strefa Typera:**
+**Config:**
 
-- `GET /api/strefa-typera/matches` - obserwowane mecze
-- `POST /api/strefa-typera/backfill` - uzupełnij dane
-- `GET /api/strefa-typera/google-sheets` - sync z arkuszem
+- `GET /api/config` - konfiguracja aplikacji
+  - Response: `{ leagues: League[], conditions: BetCondition[] }`
 
-**Analytics:**
+### 6.4 Services (Backend Logic)
 
-- `GET /api/analytics/summary` - statystyki zakładów
-- `GET /api/analytics/bets` - historia zakładów
+#### `server/src/services/api-football-client.ts`
 
-**Verify Bets:**
+**Odpowiedzialność:** Komunikacja z API-Football.com
+**Kluczowe metody:**
 
-- `POST /api/verify-bets` - weryfikacja zakładów
+- `getFixtures(date, leagueId, season)` - pobiera mecze
+- `getFixtureStatistics(fixtureId)` - pobiera statystyki meczu
+- `getFixtureEvents(fixtureId)` - pobiera wydarzenia (bramki, kartki)
+- `getH2H(team1, team2)` - head-to-head statystyki
 
-### Tech Stack (backend):
+**Rate limiting:**
+
+- Limit: 100 requestów/dzień (darmowy plan)
+- Detection: HTTP 429 response
+- Handling: Worker pausuje zadanie na 1 godzinę
+
+#### `server/src/services/data-importer.ts`
+
+**Odpowiedzialność:** Przetwarzanie i zapis danych do bazy
+**Flow:**
+
+1. Odbiera fixtures z API-Football
+2. Transformuje dane (mapping)
+3. INSERT/UPDATE w PostgreSQL (przez Prisma)
+4. Zwraca statystyki (imported, failed)
+
+#### `server/src/services/league-selector.ts`
+
+**Odpowiedzialność:** Zarządzanie ligami
+**Funkcje:**
+
+- `getEnabledLeagues()` - pobiera aktywne ligi
+- `enableLeague(leagueId)` - włącza ligę
+- `disableLeague(leagueId)` - wyłącza ligę
+
+### 6.5 Tech Stack (backend):
 
 - **Express 5.1.0** - serwer HTTP
 - **Prisma 6.18.0** - ORM
@@ -664,28 +865,132 @@ Component
 - **Node.js 24.11.1** - runtime
 - **tsx** - TypeScript execution
 - **nodemon** - auto-reload podczas development
+- **dotenv** - zmienne środowiskowe
+- **googleapis** - Google Sheets integration
+- **nodemailer** - email notifications
 
-### Pliki konfiguracyjne:
+### 6.6 Pliki konfiguracyjne:
 
-- `.env` - zmienne środowiskowe (DATABASE_URL, API_FOOTBALL_KEY, etc.)
+- `.env` - zmienne środowiskowe
+  ```env
+  DATABASE_URL="postgresql://..."
+  API_FOOTBALL_KEY="your_key"
+  SMTP_HOST="smtp.gmail.com"
+  SMTP_USER="your_email"
+  SMTP_PASS="your_password"
+  ```
 - `config/google-sheets-config.json` - konfiguracja Google Sheets API
 - `config/bet-conditions.json` - warunki zakładów
 - `prisma/schema.prisma` - schema bazy danych
 
+### 6.7 Scripts npm (Backend):
+
+```json
+{
+  "server": "nodemon --exec npx tsx server/league-config-server.ts",
+  "server:worker": "npx tsx server/background-import-worker.ts",
+  "db:generate": "prisma generate",
+  "db:studio": "prisma studio",
+  "db:migrate": "prisma migrate dev"
+}
+```
+
 ---
 
-## 7. DEVELOPMENT WORKFLOW
+## 7. LAUNCHERS (Uruchomienie)
 
-### 7.1 Uruchomienie projektu
+### 7.1 start-all.bat (Recommended)
+
+**Lokalizacja:** Root projektu
+**Uruchamia:** Backend Server + Import Worker + Frontend (Vite)
 
 ```bash
-cd "D:\narzędzia\Bet Assistant 2.0"
+start-all.bat
+```
+
+**Flow:**
+
+1. Sprawdza czy backend już działa (localhost:3000)
+2. Jeśli nie → Uruchamia backend w nowym oknie terminala
+3. Uruchamia worker w osobnym oknie terminala
+4. Czeka 2 sekundy
+5. Uruchamia frontend (Vite) w bieżącym oknie
+6. Po 3 sekundach otwiera przeglądarkę (localhost:5173)
+
+**Rezultat:** 3 okna terminala:
+
+- **Backend Server** - Express API (localhost:3000)
+- **Import Worker** - Background jobs processor
+- **Frontend** - Vite dev server (localhost:5173)
+
+### 7.2 scripts\start.bat (Frontend only)
+
+**Lokalizacja:** `scripts/start.bat`
+**Uruchamia:** Tylko frontend (Vite)
+
+```bash
+scripts\start.bat
+```
+
+**Użycie:** Gdy backend i worker już działają osobno
+
+### 7.3 scripts\start-worker.bat (Worker only)
+
+**Lokalizacja:** `scripts/start-worker.bat`
+**Uruchamia:** Tylko import worker
+
+```bash
+scripts\start-worker.bat
+```
+
+**Użycie:** Gdy chcesz uruchomić tylko worker (np. na serwerze produkcyjnym)
+
+### 7.4 Ręczne uruchomienie (Development)
+
+```bash
+# Terminal 1: Backend Server
+npm run server
+
+# Terminal 2: Import Worker
+npm run server:worker
+
+# Terminal 3: Frontend
 npm run dev
 ```
 
-**Rezultat:** Vite dev server na `http://localhost:5173`
+---
 
-### 7.2 Build produkcyjny
+## 8. DEVELOPMENT WORKFLOW
+
+### 8.1 Uruchomienie projektu (Development)
+
+**Opcja 1: Wszystko naraz (Recommended)**
+
+```bash
+cd "D:\narzędzia\Bet Assistant 2.0"
+start-all.bat
+```
+
+**Rezultat:**
+
+- Backend API: `http://localhost:3000`
+- Import Worker: Background process
+- Frontend: `http://localhost:5173` (auto-open w przeglądarce)
+
+**Opcja 2: Ręcznie (3 terminale)**
+
+```bash
+# Terminal 1: Backend
+npm run server
+
+# Terminal 2: Worker
+npm run server:worker
+
+# Terminal 3: Frontend
+npm run dev
+```
+
+### 8.2 Build produkcyjny
 
 ```bash
 npm run build
@@ -693,21 +998,41 @@ npm run build
 
 **Rezultat:** Pliki w folderze `/dist`
 
-### 7.3 Preview buildu
+### 8.3 Preview buildu
 
 ```bash
 npm run preview
 ```
 
-### 7.4 TypeScript check
+### 8.4 TypeScript check
 
 ```bash
 npx tsc --noEmit
 ```
 
+### 8.5 Praca z bazą danych
+
+**Prisma Studio (GUI):**
+
+```bash
+npm run db:studio
+```
+
+**Migracje:**
+
+```bash
+npm run db:migrate
+```
+
+**Regeneracja Prisma Client:**
+
+```bash
+npm run db:generate
+```
+
 ---
 
-## 8. GIT & GITHUB
+## 9. GIT & GITHUB
 
 **Repository:** https://github.com/Norfeusz/bet-assisstant-2.0.git  
 **Branch:** main
@@ -724,41 +1049,59 @@ style: formatowanie
 
 ---
 
-## 9. PLAN IMPLEMENTACJI (Etapy)
+## 10. PLAN IMPLEMENTACJI (Etapy)
 
-**Status:** ✅ Etap 0 - Setup (ukończony)
+**Status:** ✅ Etap 0 - Setup (ukończony), ⏳ Krok 2 - Import Page (w trakcie)
 
-### Etap 1: Infrastruktura (NASTĘPNY)
+### ✅ Krok 1: Launcher (UKOŃCZONY)
 
-- `src/api/client.ts` - API client
-- `src/types/index.ts` - TypeScript types
-- `src/store/appStore.ts` - Zustand store
-- `src/utils/` - utility functions
+- ✅ `start-all.bat` - uruchamia backend + worker + frontend
+- ✅ `scripts/start.bat` - uruchamia tylko frontend
+- ✅ `scripts/start-worker.bat` - uruchamia tylko worker
+- ✅ Backend zmigrowany do `server/`
+- ✅ Prisma schema i migracje skopiowane
+- ✅ Wszystkie pliki konfiguracyjne (.env, config/)
 
-### Etap 2: Komponenty współdzielone
+### ⏳ Krok 2: Import Page (W TRAKCIE)
 
-- Modal component
-- Table component
-- Form components
-- Toast notifications
+- ✅ `src/pages/ImportPage.tsx` - komponent React z pełną funkcjonalnością
+- ✅ `src/pages/ImportPage.module.css` - stylowanie CSS Modules
+- ✅ Funkcje:
+  - Modal do tworzenia zadania (wybór lig, zakres dat, typ zadania)
+  - Lista zadań z auto-refresh (co 5s)
+  - Statusy zadań z kolorami
+  - Paski postępu dla aktywnych zadań
+  - Toggle ukrytych/aktywnych zadań
+  - Obsługa błędów i rate limitów
+- ✅ **Krok 3: Obsługa aktywnego zadania**
+  - Przyciski akcji: Wstrzymaj, Wznów, Zakończ
+  - Integracja z API: `/api/import-jobs/:id/pause`, `/resume`, `/delete`
+  - Walidacja statusów (pokazuj odpowiednie przyciski dla każdego statusu)
+- ✅ **Krok 4: Masowe operacje i ukrywanie**
+  - Checkbox przy każdym zadaniu + "Zaznacz wszystkie"
+  - Przycisk "Usuń" dla zadań w kolejce (in_queue, pending)
+  - Przycisk "Ukryj" dla zadań zakończonych (completed, failed)
+  - Akcje masowe: "Usuń zaznaczone", "Ukryj zaznaczone"
+  - Funkcje: `hideJob()`, `deleteJob()`, `toggleJobSelection()`, `toggleSelectAll()`
+- ✅ **Krok 5: Przyciski szybkiego wyboru dat**
+  - Funkcja `setDatePreset()` z 8 presetami
+  - Dni: przedwczoraj, wczoraj, dzisiaj, jutro, pojutrze
+  - Tygodnie: poprzedni, obecny, następny (poniedziałek-niedziela)
+  - UI: grid 5 kolumn, przyciski tygodniowe szersze (span 2)
+  - Style: btnPreset (szary), btnPresetWide (niebieski)
+- 🔲 Testy funkcjonalności (do wykonania po uruchomieniu)
 
-### Etap 3-7: Strony
+### 📋 Następne kroki (z Migracja.txt):
 
-- Import Page
-- Database Page
-- **Bet Finder Page** (najważniejsze!)
-- Strefa Typera Page
-- Analytics Page
-
-### Etap 8-10: Polish & Testing
-
-- Style
-- Backend integration
-- Testy i bugfixy
+- Krok 3: Zakładka - Baza Danych
+- Krok 4: Zakładka - Wyszukiwarka Typów (Bet Finder)
+- Krok 5: Zakładka - Strefa Typera
+- Krok 6: Zakładka - Analityka
+- Krok 7-10: Infrastruktura, komponenty współdzielone, polish
 
 ---
 
-## 10. AKTUALIZACJE
+## 11. AKTUALIZACJE
 
 **30 grudnia 2025 - 15:56:**
 
@@ -767,6 +1110,9 @@ style: formatowanie
 - ✅ Layout z nawigacją
 - ✅ Git + GitHub integration
 - ✅ Dokumentacja (3 pliki)
+
+**30 grudnia 2025 - 16:30:**
+
 - ✅ **Launcher** - start.bat i start-all.bat
 - ✅ **Backend skopiowany** ze `stary/` do `server/`
 - ✅ **Prisma** - schema i migracje skopiowane
@@ -774,11 +1120,49 @@ style: formatowanie
 - ✅ **Dependencies** - backend packages zainstalowane
 - ✅ **Backend działa** niezależnie na localhost:3000
 
-**Następny krok:** Etap 1 - Infrastruktura frontendu (API client, types, store, utils)
+**30 grudnia 2025 - 17:45:**
+
+- ✅ **Import Worker** - zintegrowany z start-all.bat
+- ✅ **ImportPage.tsx** - pełna implementacja React
+- ✅ **Dokumentacja** - rozbudowana o worker i import flow
+- ✅ **scripts/start-worker.bat** - osobny launcher dla workera
+
+**30 grudnia 2025 - 18:30:**
+
+- ✅ **Bugfix: Worker** - naprawiono import path `../db.js` → `../db/index.js`
+- ✅ **Bugfix: Worker** - zamieniono `require.main` na ES module check w backup-database.ts
+- ✅ **Bugfix: Worker** - naprawiono formatowanie w metodzie `start()` (setInterval)
+- ✅ **Krok 3: Obsługa aktywnego zadania**
+  - Dodano funkcje: `pauseJob()`, `resumeJob()`, `cancelJob()`
+  - Dodano przyciski akcji w kartach zadań
+  - Style dla przycisków (btnAction, btnActionDanger)
+  - Warunkowe wyświetlanie przycisków według statusu zadania
+
+**30 grudnia 2025 - 19:00:**
+
+- ✅ **Krok 4: Masowe operacje i ukrywanie zadań**
+  - Stan `selectedJobs` dla zaznaczonych zadań
+  - Toolbar z checkboxem "Zaznacz wszystkie" i licznikiem
+  - Funkcje: `hideJob()`, `deleteJob()`, `hideSelectedJobs()`, `deleteSelectedJobs()`
+  - UI: checkbox przy każdym zadaniu, przyciski masowe w toolbar
+  - Przyciski indywidualne: "Usuń" (kolejka), "Ukryj" (zakończone)
+  - Style: toolbar, selectAllLabel, btnBulkDelete, btnBulkHide, jobCheckbox
+
+**30 grudnia 2025 - 19:15:**
+
+- ✅ **Krok 5: Przyciski szybkiego wyboru dat**
+  - Funkcja `setDatePreset()` - obsługa 8 presetów
+  - Presety dni: przedwczoraj, wczoraj, dzisiaj, jutro, pojutrze
+  - Presety tygodni: poprzedni, obecny, następny (poniedziałek-niedziela)
+  - Logika kalkulacji dat z uwzględnieniem poniedziałku jako pierwszego dnia tygodnia
+  - UI: grid layout 5 kolumn, przyciski dzienne (1 kolumna), tygodniowe (2 kolumny)
+  - Style: btnPreset (szary), btnPresetWide (niebieski z ikonami)
+
+**Następny krok:** Krok 6 - Kalendarz z informacją o zaimportowanych meczach
 
 ---
 
-## NOTATKI TECHNICZNE
+## 12. NOTATKI TECHNICZNE
 
 ### Performance considerations:
 

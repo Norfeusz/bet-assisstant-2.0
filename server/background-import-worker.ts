@@ -491,10 +491,12 @@ private async processJob(job: ImportJob): Promise<void> {
 		// Check immediately on start
 		await this.checkAndProcessJobs()
 
-	// Check for pending/rate_limited jobs every 5 minutes
-	setInterval(async () => {
-		await this.checkAndProcessJobs()
-	}, 300000) // Check every 5 minutes		// Keep process alive
+		// Check for pending/rate_limited jobs every 5 minutes
+		setInterval(async () => {
+			await this.checkAndProcessJobs()
+		}, 300000) // Check every 5 minutes
+
+		// Keep process alive
 		process.on('SIGINT', async () => {
 			console.log('\n⏹️  Shutting down worker...')
 			await prisma.$disconnect()

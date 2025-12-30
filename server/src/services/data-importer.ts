@@ -5,7 +5,7 @@
 
 import { ApiFootballClient } from './api-football-client.js'
 import { LeagueSelector, LeagueConfig } from './league-selector.js'
-import { prisma } from '../db.js'
+import { prisma } from '../db/index.js'
 import {
 	FixtureResponse,
 	FixtureStatisticsResponse,

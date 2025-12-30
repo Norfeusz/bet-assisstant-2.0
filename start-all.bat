@@ -54,11 +54,25 @@ if %errorlevel% equ 0 (
 )
 
 echo.
+echo [INFO] Uruchamiam import worker w nowym oknie...
+start "Import Worker" cmd /k "echo [WORKER] Uruchamiam import worker... && npm run server:worker"
+
+echo [INFO] Czekam 2 sekundy przed uruchomieniem frontendu...
+timeout /t 2 /nobreak >nul
+
+echo.
 echo [INFO] Uruchamiam frontend (Vite dev server)...
 echo [INFO] Aplikacja bedzie dostepna na: http://localhost:5173
 echo.
 echo ========================================
-echo   Aby zatrzymac serwer nacisnij Ctrl+C
+echo   URUCHOMIONE PROCESY:
+echo   - Backend Server (localhost:3000)
+echo   - Import Worker (background jobs)
+echo   - Frontend (localhost:5173)
+echo ========================================
+echo.
+echo   Aby zatrzymac frontend nacisnij Ctrl+C
+echo   Backend i Worker zamknij osobno
 echo ========================================
 echo.
 

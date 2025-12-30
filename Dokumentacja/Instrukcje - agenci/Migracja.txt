@@ -1,1 +1,17 @@
 1. Stwórz plik launcher - który jednym kliknięciem odpala nam server i frontend
+
+2. Zakładka - Import 
+Funkcja importu zostaje w całości tak jak jest w starym projekcie.
+
+Modal nowe zadanie, działanie importu nowych meczów, aktualizacja wyników. 
+To co może uledz poprawie to sam wygląd zakładki. 
+Na start zostawmy tylko przycisk z nowym zadaniem i listę zadań w tle
+
+
+3.dodajmy obsługę aktywnego zadania - tak jak w starym projekcie - wznów, zakończ, wstrzymaj
+
+4. Do zadań w kolejce dodaj przycisk usuń - usuwający zadanie, do zakończonych - ukryj - przenoszący do zakładki ukryte. Ponadto opcję "zaznacz wszystkie"
+
+5. Do modala z nowym zadaniem dodajmy przyciski z automatycznym wyborem daty - przedwczoraj, wczoraj, dzisiaj, jutro, pojutrze, poprzedni tydzień, obecny tydzień, następny tydzień
+
+6. Do modala z nowym zadaniem dodajmy nowy button - sprawdź kalendarz - otwierający kalendarz, który pokazuje info które dni mają zimportowane mecze i które mają zaktualizowane wyniki - pokazujmy to za pomocą kolorów - dni bez niczego normalnie, na biało, dni ze zimportowanymi meczami na niebiesko, dni ze zaktualizowanymi wynikami na zielono. Weryfikacji dokonajmy za pomocą analizy zakończonych zadań.

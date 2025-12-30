@@ -1,0 +1,10 @@
+[
+  {
+    "id": 417,
+    "name": "Premier League",
+    "country": "Bahrain",
+    "type": "League",
+    "priority": 3,
+    "enabled": true
+  }
+]
