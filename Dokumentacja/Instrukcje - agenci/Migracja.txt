@@ -15,3 +15,20 @@ Na start zostawmy tylko przycisk z nowym zadaniem i listę zadań w tle
 5. Do modala z nowym zadaniem dodajmy przyciski z automatycznym wyborem daty - przedwczoraj, wczoraj, dzisiaj, jutro, pojutrze, poprzedni tydzień, obecny tydzień, następny tydzień
 
 6. Do modala z nowym zadaniem dodajmy nowy button - sprawdź kalendarz - otwierający kalendarz, który pokazuje info które dni mają zimportowane mecze i które mają zaktualizowane wyniki - pokazujmy to za pomocą kolorów - dni bez niczego normalnie, na biało, dni ze zimportowanymi meczami na niebiesko, dni ze zaktualizowanymi wynikami na zielono. Weryfikacji dokonajmy za pomocą analizy zakończonych zadań.
+
+7. W wyszukiwarce typów mamy ze starego narzędzia zaimportować:
+-liczba najlepszych wyników
+-Liczba meczów do analizy|
+-Zakres dat nadchodzących meczów
+-button z Automatycznym dodawaniem typów
+-Kolejka wyszukiwań
+
+Reszty narazie nie implementujemy
+
+8. Po kliknięciu w automatyczne dodawanie typów, typy do wyboru (z zachowaniem grupowania)
+-wygrane vs przegrane
+-cała grupa bramki
+-cała grupa rożne - poza najwięcej rożnych pojedynczo i najmniej rożnych pojedynczo
+-cała grupa dom/wyjazd 
+
+narazie tyle

@@ -793,25 +793,32 @@ scripts\start-worker.bat
 
 ```typescript
 interface ImportJob {
-  id: number
-  leagues: number[]                    // Array league IDs
-  date_from: string                    // YYYY-MM-DD
-  date_to: string                      // YYYY-MM-DD
-  job_type: 'new_matches' | 'update_results'
-  status: 'in_queue' | 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'rate_limited'
+  id: number;
+  leagues: number[]; // Array league IDs
+  date_from: string; // YYYY-MM-DD
+  date_to: string; // YYYY-MM-DD
+  job_type: "new_matches" | "update_results";
+  status:
+    | "in_queue"
+    | "pending"
+    | "running"
+    | "paused"
+    | "completed"
+    | "failed"
+    | "rate_limited";
   progress: {
-    current_league?: number
-    current_date?: string
-    completed_leagues?: number[]       // Array completed league IDs
-  }
-  total_matches: number
-  imported_matches: number
-  failed_matches: number
-  rate_limit_remaining: number
-  rate_limit_reset_at: string | null   // ISO timestamp
-  error_message?: string
-  created_at: string                   // ISO timestamp
-  started_at?: string
+    current_league?: number;
+    current_date?: string;
+    completed_leagues?: number[]; // Array completed league IDs
+  };
+  total_matches: number;
+  imported_matches: number;
+  failed_matches: number;
+  rate_limit_remaining: number;
+  rate_limit_reset_at: string | null; // ISO timestamp
+  error_message?: string;
+  created_at: string; // ISO timestamp
+  started_at?: string;
 }
 ```
 
@@ -1158,7 +1165,38 @@ style: formatowanie
   - UI: grid layout 5 kolumn, przyciski dzienne (1 kolumna), tygodniowe (2 kolumny)
   - Style: btnPreset (szary), btnPresetWide (niebieski z ikonami)
 
-**Następny krok:** Krok 6 - Kalendarz z informacją o zaimportowanych meczach
+**30 grudnia 2025 - 20:00:**
+
+- ✅ **Krok 6: Kalendarz z informacją o zaimportowanych meczach**
+  - Dodano funkcję `renderCalendar()` z nawigacją miesiąc w miesiąc
+  - Click-to-select: kliknięcie dnia wypełnia dateFrom/dateTo
+  - Color coding: białe (brak), niebieskie (new_matches), zielone (update_results)
+  - Modal z kalendarzem i legendą kolorów
+  - Analiza wszystkich zadań (visible + hidden) dla dokładności
+  - Funkcja `formatLocalDate()` - unika problemów z UTC timezone
+
+**31 grudnia 2025 - 12:00:**
+
+- ✅ **Krok 7-8: Wyszukiwarka Typów - Struktura i UI**
+  - Utworzono `BetFinderPage.tsx` (420 linii) - pełna struktura React
+  - Utworzono `BetFinderPage.module.css` (450 linii) - kompletny styling
+  - **Krok 7 - Zaimplementowane elementy:**
+    - Liczba najlepszych wyników (TOP 5/10/15/20)
+    - Liczba meczów do analizy (5/10/15/20/30/50/Wszystkie)
+    - Zakres dat nadchodzących meczów (date picker + 3 presety)
+    - Button "Automatycznie dodaj typy" (otwiera modal)
+    - Kolejka wyszukiwań (struktura UI, pusta na start)
+  - **Krok 8 - Modal z typami (z zachowaniem grupowania):**
+    - **Grupa 1: Rezultat** - Wygrane vs Przegrane
+    - **Grupa 2: Bramki** - 6 typów (Najwięcej bramek, Najmniej bramek, Przewaga bramkowa, Handicap 1.5, Najwięcej BTS, Bez BTS)
+    - **Grupa 3: Rożne** - 4 typy (WYKLUCZONO: najwięcej/najmniej rożnych pojedynczo)
+    - **Grupa 4: Dom/Wyjazd** - 4 typy (Przewaga gospodarzy, Przewaga gości, Bramki gospodarzy, Bramki gości)
+  - Stan aplikacji: topCount, matchCount, dateFrom, dateTo, searchQueue, selectedBetTypes
+  - Funkcje pomocnicze: formatDate(), setTodayDate(), setTomorrowDate(), setDayAfterTomorrowDate()
+  - UI: Checkboxy w modalu, licznik wybranych typów, przycisk "Dodaj do kolejki"
+  - **TODO dla nowego agenta:** Implementacja logiki wyszukiwania i kolejki (backend + algorytmy)
+
+**Następny krok:** Przekazanie projektu do nowego agenta dla implementacji logiki wyszukiwania
 
 ---
 
