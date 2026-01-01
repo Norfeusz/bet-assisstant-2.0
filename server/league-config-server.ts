@@ -14,6 +14,7 @@ import importJobsRouter from './routes/import-jobs'
 import strefaTyperaRouter from './routes/strefa-typera'
 import verifyBetsRouter from './routes/verify-bets'
 import analyticsRouter from './routes/analytics'
+import betFinderRouter from './routes/bet-finder'
 
 dotenv.config()
 
@@ -33,6 +34,9 @@ app.use('/api', verifyBetsRouter)
 
 // Analytics routes
 app.use('/api', analyticsRouter)
+
+// Bet Finder routes
+app.use('/api', betFinderRouter)
 
 // Initialize services
 const apiKey = process.env.API_FOOTBALL_KEY || 'dummy-key'

@@ -1,12 +1,41 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import styles from './BetFinderPage.module.css'
 
 interface SearchQueue {
   id: number
   searchType: string
   status: 'pending' | 'running' | 'completed' | 'failed'
-  results?: any[]
+  results?: SearchResult[]
   createdAt: string
+  error?: string
+}
+
+interface SearchResult {
+  matchId: number
+  homeTeam: string
+  awayTeam: string
+  matchDate: string
+  league: string
+  country: string
+  score: number
+  homeStats: TeamStats
+  awayStats: TeamStats
+  homeOdds?: number
+  drawOdds?: number
+  awayOdds?: number
+  recommendation: string
+}
+
+interface TeamStats {
+  played: number
+  wins: number
+  draws: number
+  losses: number
+  winRate: number
+  lossRate: number
+  drawRate: number
+  avgGoalsScored: number
+  avgGoalsConceded: number
 }
 
 function BetFinderPage() {
@@ -24,6 +53,12 @@ function BetFinderPage() {
   
   // Selected bet types for auto-add
   const [selectedBetTypes, setSelectedBetTypes] = useState<string[]>([])
+  
+  // Track jobs currently being imported to prevent duplicates (useRef for synchronous access)
+  const importingJobIds = useRef<Set<number>>(new Set())
+  
+  // Flag to prevent concurrent loadSearchQueue calls
+  const isLoadingQueue = useRef(false)
 
   // Initialize dates on mount
   useEffect(() => {
@@ -33,7 +68,215 @@ function BetFinderPage() {
     
     setDateFrom(formatDate(today))
     setDateTo(formatDate(tomorrow))
+
+    // Load search queue on mount
+    loadSearchQueue()
+
+    // Auto-refresh queue every 5 seconds
+    const interval = setInterval(loadSearchQueue, 5000)
+    return () => clearInterval(interval)
   }, [])
+
+  // Check if job was already imported (using localStorage)
+  const isJobImported = (jobId: number): boolean => {
+    const imported = localStorage.getItem(`bet-finder-imported-${jobId}`)
+    return imported === 'true'
+  }
+  
+  // Mark job as imported
+  const markJobAsImported = (jobId: number) => {
+    localStorage.setItem(`bet-finder-imported-${jobId}`, 'true')
+  }
+  
+  // Load search queue from API
+  const loadSearchQueue = async () => {
+    // Prevent concurrent calls
+    if (isLoadingQueue.current) {
+      console.log('⏸️ Queue loading already in progress, skipping...')
+      return
+    }
+    
+    isLoadingQueue.current = true
+    
+    try {
+      const response = await fetch('/api/bet-finder/queue')
+      if (!response.ok) {
+        throw new Error('Failed to load queue')
+      }
+      const data = await response.json()
+      setSearchQueue(data)
+      
+      // Auto-import completed jobs to Google Sheets (use for...of to properly await)
+      for (const job of data) {
+        // Skip if already imported or currently importing (synchronous check with useRef)
+        if (isJobImported(job.id) || importingJobIds.current.has(job.id)) {
+          continue
+        }
+        
+        if (job.status === 'completed' && job.results && job.results.length > 0) {
+          // Mark as importing (synchronous with useRef)
+          importingJobIds.current.add(job.id)
+          console.log(`🔒 Locked job #${job.id} for import`)
+          
+          try {
+            await importToGoogleSheets(job)
+            markJobAsImported(job.id)
+            await deleteJob(job.id)
+          } catch (error) {
+            console.error(`Error importing job #${job.id}:`, error)
+          } finally {
+            // Remove from importing set
+            importingJobIds.current.delete(job.id)
+            console.log(`🔓 Unlocked job #${job.id}`)
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error loading queue:', error)
+    } finally {
+      isLoadingQueue.current = false
+    }
+  }
+  
+  // Delete job from queue
+  const deleteJob = async (jobId: number) => {
+    try {
+      const response = await fetch(`/api/bet-finder/queue/${jobId}`, {
+        method: 'DELETE',
+      })
+      
+      // Ignore 404 - job already deleted
+      if (response.status === 404) {
+        console.log(`⏭️ Job #${jobId} already deleted`)
+        return
+      }
+      
+      if (!response.ok) {
+        throw new Error('Failed to delete job')
+      }
+      
+      console.log(`🗑️ Deleted job #${jobId} from queue`)
+    } catch (error) {
+      console.error(`Error deleting job #${jobId}:`, error)
+    }
+  }
+  
+  // Import results to Google Sheets using existing endpoint
+  const importToGoogleSheets = async (job: SearchQueue): Promise<void> => {
+    if (!job.results || job.results.length === 0) return
+    
+    try {
+      console.log(`📤 Importing ${job.results.length} results to Google Sheets...`)
+      
+      let added = 0
+      let skipped = 0
+      let errors = 0
+      
+      // Import each result individually using add-match-bet-builder
+      for (const result of job.results) {
+        try {
+          // Map search type to bet type and option
+          const { betType, betOption } = mapSearchTypeToBet(job.searchType, result)
+          
+          const response = await fetch('/api/strefa-typera/add-match-bet-builder', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              homeTeam: result.homeTeam,
+              awayTeam: result.awayTeam,
+              league: result.league,
+              date: result.matchDate,
+              betType,
+              betOption,
+              odds: '', // Empty for auto-add
+              superbetLink: '',
+              flashscoreLink: '',
+            })
+          })
+          
+          const data = await response.json()
+          
+          if (data.success) {
+            added++
+            console.log(`✅ Added: ${result.homeTeam} vs ${result.awayTeam} (${data.szanse})`)
+          } else if (data.skipped) {
+            skipped++
+            console.log(`⏭️ Skipped: ${result.homeTeam} vs ${result.awayTeam} (${data.skipReason})`)
+          } else {
+            errors++
+            console.error(`❌ Error: ${result.homeTeam} vs ${result.awayTeam}`)
+          }
+        } catch (error) {
+          errors++
+          console.error(`❌ Error importing ${result.homeTeam} vs ${result.awayTeam}:`, error)
+        }
+      }
+      
+      console.log(`📊 Import complete: ${added} added, ${skipped} skipped, ${errors} errors`)
+    } catch (error) {
+      console.error('Error importing to Google Sheets:', error)
+    }
+  }
+  
+  // Map search type to bet type and option
+  const mapSearchTypeToBet = (searchType: string, result: SearchResult): { betType: string; betOption: string } => {
+    // Map search type to specific bet based on algorithm logic
+    switch (searchType) {
+      case 'winner-vs-loser':
+        // Algorithm analyzes both scenarios and puts info in recommendation
+        // Check recommendation to determine if bet should be on home (1) or away (2)
+        if (result.recommendation.includes('Zakład: 2') || result.recommendation.includes('przewaga gości')) {
+          return { betType: '2', betOption: '-' } // Away win
+        } else {
+          return { betType: '1', betOption: '-' } // Home win
+        }
+      
+      case 'most-goals':
+        return { betType: 'Over', betOption: '2.5' }
+      
+      case 'least-goals':
+        return { betType: 'Under', betOption: '2.5' }
+      
+      case 'goal-advantage':
+        return { betType: 'Over', betOption: '2.5' }
+      
+      case 'handicap-15':
+        return { betType: 'Handi 1', betOption: '-1.5' }
+      
+      case 'most-bts':
+        return { betType: 'BTS', betOption: 'Tak' }
+      
+      case 'no-bts':
+        return { betType: 'BTS', betOption: 'Nie' }
+      
+      case 'most-corners':
+        return { betType: 'Over Rożne', betOption: '9.5' }
+      
+      case 'least-corners':
+        return { betType: 'Under Rożne', betOption: '9.5' }
+      
+      case 'corner-advantage':
+        return { betType: 'Over Rożne', betOption: '9.5' }
+      
+      case 'corner-handicap':
+        return { betType: 'Handi Rożne 1', betOption: '-3.5' }
+      
+      case 'home-advantage':
+        return { betType: '1', betOption: '-' }
+      
+      case 'away-advantage':
+        return { betType: '2', betOption: '-' }
+      
+      case 'home-goals':
+        return { betType: 'Over Gosp', betOption: '1.5' }
+      
+      case 'away-goals':
+        return { betType: 'Over Gość', betOption: '1.5' }
+      
+      default:
+        return { betType: 'Over', betOption: '2.5' }
+    }
+  }
 
   const formatDate = (date: Date) => {
     const year = date.getFullYear()
@@ -84,29 +327,85 @@ function BetFinderPage() {
     setSelectedBetTypes([])
   }
 
+  // Translate search type to Polish
+  const translateSearchType = (type: string): string => {
+    const translations: { [key: string]: string } = {
+      'winner-vs-loser': '🏆 Wygrane vs Przegrane',
+      'most-goals': '⚽ Najwięcej bramek',
+      'least-goals': '🎯 Najmniej bramek',
+      'goal-advantage': '💪 Przewaga bramkowa',
+      'most-bts': '🎯 Najwięcej BTS',
+      'no-bts': '🛡️ Bez BTS',
+      'most-corners-match': '🚩 Najwięcej rożnych (mecz)',
+      'least-corners-match': '📐 Najmniej rożnych (mecz)',
+      'most-corners-team': '🔥 Najwięcej rożnych (drużyna)',
+      'least-corners-team': '❄️ Najmniej rożnych (drużyna)',
+      'corner-advantage': '⚡ Przewaga rożnych',
+      'home-wins': '🏠 Wygrane u siebie',
+      'away-wins': '✈️ Wygrane na wyjeździe',
+      'home-losses': '📉 Porażki u siebie',
+      'away-losses': '🔻 Porażki na wyjeździe',
+      'home-advantage': '💪 Przewaga gospodarzy',
+      'away-advantage': '🚀 Przewaga gości',
+    }
+    return translations[type] || type
+  }
+
+  // Translate status to Polish
+  const translateStatus = (status: string): string => {
+    const translations: { [key: string]: string } = {
+      'pending': '⏳ Oczekuje',
+      'running': '▶️ W trakcie',
+      'completed': '✅ Ukończono',
+      'failed': '❌ Błąd',
+    }
+    return translations[status] || status
+  }
+
   const addToQueue = async () => {
     if (selectedBetTypes.length === 0) {
       alert('Wybierz przynajmniej jeden typ zakładu')
       return
     }
 
-    // TODO: Implement queue logic - will be handled by new agent
-    console.log('Adding to queue:', {
-      betTypes: selectedBetTypes,
-      topCount,
-      matchCount,
-      dateFrom,
-      dateTo
-    })
+    try {
+      const response = await fetch('/api/bet-finder/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          betTypes: selectedBetTypes,
+          topCount,
+          matchCount: matchCount === -1 ? 999 : matchCount,
+          dateFrom,
+          dateTo,
+        }),
+      })
 
-    setShowAutoAddModal(false)
-    setSelectedBetTypes([])
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to create search jobs')
+      }
+
+      const data = await response.json()
+      console.log('✅ Search jobs created:', data)
+
+      // Reload queue
+      await loadSearchQueue()
+
+      alert(`✅ Dodano ${data.jobs.length} wyszukiwań do kolejki`)
+
+      setShowAutoAddModal(false)
+      setSelectedBetTypes([])
+    } catch (error: any) {
+      console.error('Error adding to queue:', error)
+      alert(`Błąd podczas dodawania do kolejki: ${error.message}`)
+    }
   }
 
   // Bet type groups from step 8
   const betTypeGroups = {
     result: [
-      { id: 'winner-vs-loser', label: '🏆 Wygrane vs Przegrane', description: 'Drużyna z najwyższym % wygranych vs drużyna z najwyższym % przegranych' }
+      { id: 'winner-vs-loser', label: '🏆 Wygrane vs Przegrane', description: 'Jedna drużyna wygrywa często, druga przegrywa często (auto: 1 lub 2)' }
     ],
     goals: [
       { id: 'most-goals', label: '⚽ Najwięcej bramek', description: 'Obie drużyny mają najwyższą średnią bramek' },
@@ -225,32 +524,130 @@ function BetFinderPage() {
           >
             🎯 Automatycznie dodaj typy
           </button>
+          {/* Debug button to clear localStorage cache */}
+          {searchQueue.length === 0 && (
+            <button
+              className={styles.btnSecondary}
+              onClick={() => {
+                // Clear only bet-finder related localStorage
+                Object.keys(localStorage).forEach(key => {
+                  if (key.startsWith('bet-finder-')) {
+                    localStorage.removeItem(key)
+                  }
+                })
+                alert('✅ Wyczyszczono cache importów')
+              }}
+              style={{ marginLeft: '10px', fontSize: '12px', padding: '8px 16px' }}
+            >
+              🧹 Wyczyść cache
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Search Queue */}
+      {/* Search Queue - Active */}
       <div className={styles.section}>
-        <h3>Kolejka wyszukiwań</h3>
-        {searchQueue.length === 0 ? (
+        <h3>⏳ Aktywne wyszukiwania</h3>
+        {searchQueue.filter(job => job.status !== 'completed' || !isJobImported(job.id)).length === 0 ? (
           <div className={styles.emptyQueue}>
-            <p>📭 Brak wyszukiwań w kolejce</p>
+            <p>📭 Brak aktywnych wyszukiwań</p>
             <p className={styles.emptyQueueHint}>
-              Użyj przycisku "Automatycznie dodaj typy" aby dodać wyszukiwania do kolejki
+              Użyj przycisku "Automatycznie dodaj typy" aby dodać wyszukiwania do kolejki.
+              Wyniki zostaną automatycznie zaimportowane do arkusza Google Sheets po zakończeniu.
             </p>
           </div>
         ) : (
           <div className={styles.queueList}>
-            {searchQueue.map(item => (
+            {searchQueue
+              .filter(job => job.status !== 'completed' || !isJobImported(job.id))
+              .map(item => (
               <div key={item.id} className={styles.queueItem}>
                 <div className={styles.queueItemHeader}>
-                  <span className={styles.queueItemType}>{item.searchType}</span>
+                  <span className={styles.queueItemType}>{translateSearchType(item.searchType)}</span>
                   <span className={`${styles.queueItemStatus} ${styles[`status${item.status}`]}`}>
-                    {item.status}
+                    {translateStatus(item.status)}
                   </span>
                 </div>
                 <div className={styles.queueItemDetails}>
-                  {new Date(item.createdAt).toLocaleString('pl-PL')}
+                  <div>Utworzono: {new Date(item.createdAt).toLocaleString('pl-PL')}</div>
+                  {item.status === 'running' && (
+                    <div className={styles.resultsCount}>
+                      🔄 Przetwarzanie...
+                    </div>
+                  )}
+                  {item.status === 'completed' && item.results && (
+                    <div className={styles.resultsCount}>
+                      ⏳ Importowanie do arkusza...
+                    </div>
+                  )}
+                  {item.status === 'failed' && (
+                    <div className={styles.errorMessage}>
+                      ⚠️ {item.error || 'Nieznany błąd'}
+                    </div>
+                  )}
                 </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Search Queue - Completed */}
+      <div className={styles.section}>
+        <div className={styles.sectionHeaderWithButton}>
+          <h3>✅ Zakończone wyszukiwania</h3>
+          {searchQueue.filter(job => job.status === 'completed' && isJobImported(job.id)).length > 0 && (
+            <button
+              onClick={async () => {
+                if (confirm('Czy na pewno chcesz wyczyścić historię zakończonych wyszukiwań?')) {
+                  const completedJobs = searchQueue.filter(job => job.status === 'completed' && isJobImported(job.id))
+                  for (const job of completedJobs) {
+                    await deleteJob(job.id)
+                  }
+                  await loadSearchQueue()
+                }
+              }}
+              className={styles.clearHistoryButton}
+              title="Wyczyść historię zakończonych"
+            >
+              🗑️ Wyczyść historię
+            </button>
+          )}
+        </div>
+        {searchQueue.filter(job => job.status === 'completed' && isJobImported(job.id)).length === 0 ? (
+          <div className={styles.emptyQueue}>
+            <p>📭 Brak zakończonych wyszukiwań</p>
+          </div>
+        ) : (
+          <div className={styles.queueList}>
+            {searchQueue
+              .filter(job => job.status === 'completed' && isJobImported(job.id))
+              .map(item => (
+              <div key={item.id} className={`${styles.queueItem} ${styles.queueItemCompleted}`}>
+                <div className={styles.queueItemHeader}>
+                  <span className={styles.queueItemType}>{translateSearchType(item.searchType)}</span>
+                  <span className={`${styles.queueItemStatus} ${styles.statuscompleted}`}>
+                    ✅ Zaimportowano
+                  </span>
+                </div>
+                <div className={styles.queueItemDetails}>
+                  <div>Utworzono: {new Date(item.createdAt).toLocaleString('pl-PL')}</div>
+                  {item.results && (
+                    <div className={styles.resultsCount}>
+                      📊 Znaleziono: {item.results.length} typów
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={async () => {
+                    await deleteJob(item.id)
+                    await loadSearchQueue()
+                  }}
+                  className={styles.deleteButton}
+                  title="Usuń z historii"
+                >
+                  🗑️
+                </button>
               </div>
             ))}
           </div>

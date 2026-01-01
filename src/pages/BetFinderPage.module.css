@@ -252,6 +252,18 @@
   color: #6b7280;
 }
 
+.resultsCount {
+  margin-top: 4px;
+  font-weight: 600;
+  color: #059669;
+}
+
+.errorMessage {
+  margin-top: 4px;
+  font-weight: 600;
+  color: #dc2626;
+}
+
 /* Modal */
 .modal {
   position: fixed;
@@ -470,6 +482,71 @@
 .btnSecondary:hover {
   background: #4b5563;
   transform: translateY(-2px);
+}
+
+/* Section Header with Button */
+.sectionHeaderWithButton {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.sectionHeaderWithButton h3 {
+  margin: 0;
+}
+
+.clearHistoryButton {
+  background: #ef4444;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.3);
+}
+
+.clearHistoryButton:hover {
+  background: #dc2626;
+  transform: translateY(-2px);
+}
+
+/* Completed Queue Items */
+.queueItemCompleted {
+  opacity: 0.85;
+  border-left: 4px solid #10b981;
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+}
+
+.queueItemCompleted:hover {
+  opacity: 1;
+}
+
+.deleteButton {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: #ef4444;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.3);
+}
+
+.deleteButton:hover {
+  background: #dc2626;
+  transform: scale(1.1);
+}
+
+.queueItem {
+  position: relative;
 }
 
 /* Responsive */
