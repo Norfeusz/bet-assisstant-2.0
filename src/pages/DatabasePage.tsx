@@ -447,7 +447,16 @@ function DatabasePage() {
 		// Only handle clicks on is_finished='no' in matches table
 		if (selectedTable !== 'matches' || row.is_finished !== 'no') return
 		
-		const matchDate = row.match_date ? new Date(row.match_date).toISOString().split('T')[0] : ''
+		// Convert match_date to local date string (avoid timezone issues)
+		let matchDate = ''
+		if (row.match_date) {
+			const dateObj = new Date(row.match_date)
+			const year = dateObj.getFullYear()
+			const month = String(dateObj.getMonth() + 1).padStart(2, '0')
+			const day = String(dateObj.getDate()).padStart(2, '0')
+			matchDate = `${year}-${month}-${day}`
+		}
+		
 		const league = row.league || ''
 		const country = row.country || ''
 		

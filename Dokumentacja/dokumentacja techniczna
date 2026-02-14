@@ -1846,6 +1846,14 @@ const year = dateObj.getFullYear()  // Returns local year
 const day = dateObj.getDate()       // Returns local day
 ```
 
+Czyli `"2026-02-13T23:00:00.000Z"` → **2026-02-14** (poprawnie! 🎯)
+
+**Zastosowano w obu funkcjach:**
+- `handleUpdateSelected()` - bulk update (wiele meczów)
+- `handleFinishedCellClick()` - single match update (kliknięcie w "no")
+
+Wcześniej używano `toISOString().split('T')[0]` co dawało UTC date (dzień wcześniej).
+
 ### User Flow
 
 ```
