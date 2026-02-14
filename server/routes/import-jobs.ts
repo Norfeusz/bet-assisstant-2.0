@@ -27,6 +27,50 @@ router.post('/import-jobs', async (req, res) => {
 		return res.status(400).json({ error: 'dateFrom and dateTo are required' })
 	}
 
+	// For update_results jobs, filter leagues to only include those with matches in the date range
+	let finalLeagueIds = leagueIds
+	if (jobType === 'update_results') {
+		// First, get league names for the requested IDs
+		const leagueNames = await prisma.$queryRaw<Array<{ id: number, name: string, country: string }>>`
+			SELECT id, name, country
+			FROM leagues
+			WHERE id = ANY(${leagueIds}::int[])
+		`
+		
+		if (leagueNames.length === 0) {
+			return res.status(400).json({ 
+				error: 'No leagues found for provided IDs'
+			})
+		}
+		
+		// Then check which leagues have matches in the date range
+		const leaguesWithMatches = await prisma.$queryRaw<Array<{ league: string, country: string }>>`
+			SELECT DISTINCT league, country
+			FROM matches
+			WHERE match_date >= ${dateFrom}::date
+			  AND match_date <= ${dateTo}::date
+		`
+		
+		// Map back to league IDs
+		const matchingLeagues = leagueNames.filter(league => 
+			leaguesWithMatches.some(match => 
+				match.league === league.name && match.country === league.country
+			)
+		)
+		
+		finalLeagueIds = matchingLeagues.map(league => league.id)
+		
+		if (finalLeagueIds.length === 0) {
+			return res.status(400).json({ 
+				error: 'No matches found in database for selected leagues and date range',
+				details: `Searched ${leagueIds.length} leagues from ${dateFrom} to ${dateTo}`
+			})
+		}
+		
+		console.log(`📊 Filtered leagues for update_results: ${leagueIds.length} → ${finalLeagueIds.length}`)
+		console.log(`   Date range: ${dateFrom} to ${dateTo}`)
+	}
+
 	// Check if there's already an active or queued job
 	const existingJobs = await prisma.$queryRaw<Array<{ count: bigint }>>`
 		SELECT COUNT(*) as count
@@ -37,14 +81,14 @@ router.post('/import-jobs', async (req, res) => {
 	// New job gets 'pending' only if no other jobs are active/queued, otherwise 'in_queue'
 	const initialStatus = existingJobs[0].count > 0 ? 'in_queue' : 'pending'
 
-	// Create job
+	// Create job with filtered league IDs
 	const job: any = await prisma.$queryRawUnsafe(
 		`
 	INSERT INTO import_jobs (leagues, date_from, date_to, job_type, status, progress)
 	VALUES ($1::jsonb, $2::date, $3::date, $4::job_type_enum, $5::job_status_enum, '{}'::jsonb)
 	RETURNING id
 `,
-		JSON.stringify(leagueIds),
+		JSON.stringify(finalLeagueIds),
 		dateFrom,
 		dateTo,
 		jobType,
@@ -54,7 +98,14 @@ router.post('/import-jobs', async (req, res) => {
 	res.json({
 		success: true,
 		jobId: job[0].id,
-		message: 'Import job created successfully. Worker will process it shortly.',
+		message: jobType === 'update_results' && finalLeagueIds.length < leagueIds.length
+			? `Job created for ${finalLeagueIds.length} leagues with matches (${leagueIds.length - finalLeagueIds.length} empty leagues skipped)`
+			: 'Import job created successfully. Worker will process it shortly.',
+		leaguesFiltered: jobType === 'update_results' ? {
+			requested: leagueIds.length,
+			withMatches: finalLeagueIds.length,
+			skipped: leagueIds.length - finalLeagueIds.length
+		} : undefined
 	})
 	} catch (error: any) {
 		console.error('Error creating import job:', error)

@@ -36,6 +36,7 @@
   display: flex;
   gap: 5px;
   flex-wrap: wrap;
+  align-items: center;
 }
 
 .tabButton {
@@ -60,6 +61,30 @@
 .tabButton.active {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
+}
+
+.vscButton {
+  margin-left: auto;
+  background: transparent;
+  border: 2px solid #007acc;
+  border-radius: 6px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vscButton:hover {
+  background: #007acc;
+  transform: scale(1.05);
+}
+
+.vscIcon {
+  width: 24px;
+  height: 24px;
+  display: block;
 }
 
 .main {

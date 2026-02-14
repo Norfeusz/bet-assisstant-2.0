@@ -1,0 +1,149 @@
+.container {
+  background: white;
+  border-radius: 12px;
+  padding: 32px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.mainResult {
+  display: flex;
+  gap: 32px;
+  align-items: center;
+  margin-bottom: 24px;
+  padding-bottom: 24px;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.percentageBox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  border: 4px solid;
+  border-radius: 16px;
+  background: #fafafa;
+  min-width: 200px;
+}
+
+.percentage {
+  font-size: 48px;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 8px;
+}
+
+.ratio {
+  font-size: 20px;
+  font-weight: 600;
+  color: #666;
+  margin-bottom: 4px;
+}
+
+.label {
+  font-size: 14px;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stats {
+  display: flex;
+  gap: 40px;
+  flex: 1;
+  justify-content: center;
+}
+
+.statItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.statValue {
+  font-size: 36px;
+  font-weight: 700;
+  color: #333;
+  line-height: 1;
+}
+
+.statLabel {
+  font-size: 14px;
+  color: #666;
+  font-weight: 500;
+}
+
+.info {
+  display: flex;
+  justify-content: space-around;
+  gap: 24px;
+}
+
+.infoItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 24px;
+  background: #f5f5f5;
+  border-radius: 8px;
+  flex: 1;
+}
+
+.infoLabel {
+  font-size: 12px;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.infoValue {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .mainResult {
+    flex-direction: column;
+    gap: 24px;
+  }
+  
+  .stats {
+    gap: 24px;
+  }
+  
+  .statValue {
+    font-size: 28px;
+  }
+}
+
+@media (max-width: 768px) {
+  .container {
+    padding: 20px;
+  }
+  
+  .percentageBox {
+    min-width: 160px;
+    padding: 24px;
+  }
+  
+  .percentage {
+    font-size: 36px;
+  }
+  
+  .ratio {
+    font-size: 18px;
+  }
+  
+  .stats {
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  .info {
+    flex-direction: column;
+  }
+}

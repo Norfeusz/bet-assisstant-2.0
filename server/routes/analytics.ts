@@ -62,6 +62,9 @@ interface BetAnalytics {
 
 /**
  * Get all bets with analytics data from Google Sheets
+ * Query params:
+ *   - sheet: 'typy' | 'kupony' (default: 'typy')
+ *   - verified, betType, league: filters
  */
 router.get('/analytics/bets', async (req, res) => {
 	try {
@@ -71,10 +74,14 @@ router.get('/analytics/bets', async (req, res) => {
 
 		const sheets = await getGoogleSheetsClient()
 		
-		// Pobierz dane z arkusza "Typy" (kolumny A-AG)
+		// Wybór arkusza na podstawie parametru
+		const { sheet = 'typy' } = req.query
+		const sheetName = sheet === 'kupony' ? 'Kupony' : 'Typy'
+		
+		// Pobierz dane z wybranego arkusza (kolumny A-AG)
 		const response = await sheets.spreadsheets.values.get({
 			spreadsheetId: SPREADSHEET_ID,
-			range: 'Typy!A:AG',
+			range: `${sheetName}!A:AG`,
 		})
 
 		const rows = response.data.values || []
@@ -156,6 +163,8 @@ router.get('/analytics/bets', async (req, res) => {
 
 /**
  * Get statistical summary from Google Sheets
+ * Query params:
+ *   - sheet: 'typy' | 'kupony' (default: 'typy')
  */
 router.get('/analytics/summary', async (req, res) => {
 	try {
@@ -164,9 +173,14 @@ router.get('/analytics/summary', async (req, res) => {
 		}
 
 		const sheets = await getGoogleSheetsClient()
+		
+		// Wybór arkusza na podstawie parametru
+		const { sheet = 'typy' } = req.query
+		const sheetName = sheet === 'kupony' ? 'Kupony' : 'Typy'
+		
 		const response = await sheets.spreadsheets.values.get({
 			spreadsheetId: SPREADSHEET_ID,
-			range: 'Typy!A:AG',
+			range: `${sheetName}!A:AG`,
 		})
 
 		const rows = response.data.values || []
@@ -237,6 +251,76 @@ router.get('/analytics/summary', async (req, res) => {
 		})
 	} catch (error: any) {
 		console.error('[Analytics] Error generating summary from Sheets:', error)
+		res.status(500).json({ error: error.message })
+	}
+})
+
+/**
+ * Get matches from Bet Builder sheet
+ * Returns list of matches with their bet data for selection
+ */
+router.get('/analytics/bet-builder', async (req, res) => {
+	try {
+		if (!SPREADSHEET_ID) {
+			return res.status(500).json({ error: 'GOOGLE_SHEETS_ID not configured in .env' })
+		}
+
+		const sheets = await getGoogleSheetsClient()
+		
+		// Pobierz dane z arkusza "Bet Builder"
+		const response = await sheets.spreadsheets.values.get({
+			spreadsheetId: SPREADSHEET_ID,
+			range: 'Bet Builder!A:AG',
+		})
+
+		const rows = response.data.values || []
+		
+		if (rows.length <= 1) {
+			return res.json({ success: true, count: 0, data: [] })
+		}
+
+		// Pomiń nagłówek
+		const dataRows = rows.slice(1)
+		
+		// Mapowanie kolumn (taka sama struktura jak Typy/Kupony)
+		const matches: BetAnalytics[] = dataRows.map((row, index) => ({
+			id: index + 1,
+			homeTeam: row[0] || '',
+			awayTeam: row[1] || '',
+			betType: row[2] || '',
+			betOption: row[3] || '',
+			szanse: row[4] || null,
+			odds: row[5] ? parseFloat(row[5].replace(',', '.')) : null,
+			stat5HOverall: row[7] || null,
+			stat5AOverall: row[8] || null,
+			stat5HHa: row[9] || null,
+			stat5AHa: row[10] || null,
+			stat10HOverall: row[11] || null,
+			stat10AOverall: row[12] || null,
+			stat10HHa: row[13] || null,
+			stat10AHa: row[14] || null,
+			stat15HOverall: row[15] || null,
+			stat15AOverall: row[16] || null,
+			stat15HHa: row[17] || null,
+			stat15AHa: row[18] || null,
+			entered: row[20] || null,
+			resultHome: row[21] ? parseInt(row[21]) : null,
+			resultAway: row[22] ? parseInt(row[22]) : null,
+			standingHome: row[23] ? parseInt(row[23]) : null,
+			standingAway: row[24] ? parseInt(row[24]) : null,
+			country: row[26] || null,
+			league: row[27] || null,
+			matchDate: row[28] ? new Date(row[28]) : null,
+			matchId: row[29] ? parseInt(row[29]) : null
+		}))
+
+		res.json({
+			success: true,
+			count: matches.length,
+			data: matches
+		})
+	} catch (error: any) {
+		console.error('[Analytics] Error fetching Bet Builder from Sheets:', error)
 		res.status(500).json({ error: error.message })
 	}
 })

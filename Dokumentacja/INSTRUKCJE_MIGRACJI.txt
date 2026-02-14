@@ -1,0 +1,786 @@
+================================================================================
+    BET ASSISTANT 2.0 - INSTRUKCJE MIGRACJI
+    Agent: UI/Layout Specialist
+    Data: 30 grudnia 2025
+================================================================================
+
+═══════════════════════════════════════════════════════════════════════════
+    SEKCJA 1: KONTEKST I CEL PROJEKTU
+═══════════════════════════════════════════════════════════════════════════
+
+MISJA:
+Przeprowadzić pełną migrację aplikacji Bet Assistant z vanilla JavaScript
+na nowoczesny stack: React + TypeScript + Vite.
+
+LOKALIZACJE:
+- Nowy projekt (work in progress): D:\narzędzia\Bet Assistant 2.0\
+- Stary projekt (źródło): D:\narzędzia\Bet Assistant 2.0\stary\
+- Backend: localhost:3000 (Express + Prisma + PostgreSQL) - NIE ZMIENIAĆ!
+
+CO TO ZA APLIKACJA:
+System do analizy meczów piłkarskich i znajdowania okazji do typowania.
+Importuje dane z API Football, analizuje statystyki, znajduje wzorce,
+sugeruje typy, zarządzá kuponami i integracją z Google Sheets.
+
+GŁÓWNE FUNKCJONALNOŚCI:
+1. Import - zarządzanie ligami, import meczów z API Football
+2. Baza Danych - przeglądanie, filtrowanie meczów
+3. Bet Finder - wyszukiwarka typów (15+ algorytmów analitycznych)
+4. Strefa Typera - obserwowane mecze, kupony, Google Sheets
+5. Analityka - statystyki, wykresy, raporty
+
+═══════════════════════════════════════════════════════════════════════════
+    SEKCJA 2: CO ZOSTAŁO JUŻ ZROBIONE
+═══════════════════════════════════════════════════════════════════════════
+
+SETUP PROJEKTU:
+✅ Utworzony folder "Bet Assistant 2.0"
+✅ npm init + instalacja zależności
+✅ Konfiguracja TypeScript (tsconfig.json, tsconfig.node.json)
+✅ Konfiguracja Vite (vite.config.ts z proxy do localhost:3000)
+✅ index.html (entry point)
+✅ package.json ze skryptami (dev, build, preview)
+
+ZAINSTALOWANE ZALEŻNOŚCI:
+✅ react@18.3.1
+✅ react-dom@18.3.1
+✅ react-router-dom@6.30.2
+✅ @tanstack/react-query@5.90.15
+✅ zustand@5.0.9
+✅ vite@5.4.21
+✅ typescript@5.9.3
+✅ @vitejs/plugin-react@5.1.2
+✅ @types/react, @types/react-dom, @types/node
+
+STRUKTURA FOLDERÓW:
+src/
+├── api/          ✅ folder istnieje
+├── components/   ✅ folder istnieje
+├── hooks/        ✅ folder istnieje
+├── pages/        ✅ folder istnieje
+├── store/        ✅ folder istnieje
+├── styles/       ✅ folder istnieje
+├── types/        ✅ folder istnieje
+└── utils/        ⚠️ może brakować - sprawdź i utwórz jeśli trzeba
+
+PLIKI KTÓRE POWINNY ISTNIEĆ (sprawdź!):
+- src/main.tsx
+- src/App.tsx
+- src/vite-env.d.ts
+- src/components/Layout.tsx
+- src/components/Layout.module.css
+- src/pages/ImportPage.tsx
+- src/pages/DatabasePage.tsx
+- src/pages/BetFinderPage.tsx
+- src/pages/StrefaTyperaPage.tsx
+- src/pages/AnalyticsPage.tsx
+- src/styles/global.css
+- src/api/client.ts
+- src/store/appStore.ts
+- src/types/index.ts
+
+═══════════════════════════════════════════════════════════════════════════
+    SEKCJA 3: PIERWSZY KROK - WERYFIKACJA I NAPRAWA
+═══════════════════════════════════════════════════════════════════════════
+
+KROK 1.1: OTWÓRZ WORKSPACE
+cd "D:\narzędzia\Bet Assistant 2.0"
+code .
+
+KROK 1.2: SPRAWDŹ CZY PLIKI FIZYCZNIE ISTNIEJĄ
+cd "D:\narzędzia\Bet Assistant 2.0\src"
+dir
+
+OCZEKIWANY WYNIK:
+Powinny być widoczne pliki: main.tsx, App.tsx, vite-env.d.ts
+oraz foldery: api, components, hooks, pages, store, styles, types
+
+JEŚLI BRAKUJE PLIKÓW - zobacz SEKCJĘ 4 (Naprawa minimalnej wersji)
+
+KROK 1.3: TEST URUCHOMIENIA
+cd "D:\narzędzia\Bet Assistant 2.0"
+npm run dev
+
+Otwórz: http://localhost:5173
+
+OCZEKIWANY REZULTAT:
+- Biała strona z nagłówkiem "⚽ Bet Assistant"
+- Lub komunikat o błędzie w konsoli
+
+JEŚLI DZIAŁA - przejdź do SEKCJI 5 (Plan migracji)
+JEŚLI NIE DZIAŁA - przejdź do SEKCJI 4 (Naprawa)
+
+═══════════════════════════════════════════════════════════════════════════
+    SEKCJA 4: NAPRAWA - MINIMALNA DZIAŁAJĄCA WERSJA
+═══════════════════════════════════════════════════════════════════════════
+
+Jeśli serwer Vite pokazuje błąd "Failed to load url /src/main.tsx",
+oznacza to że pliki React nie istnieją fizycznie. Utwórz je:
+
+PLIK 1: src/main.tsx
+----------------------------------------
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { BrowserRouter } from 'react-router-dom'
+import App from './App'
+import './styles/global.css'
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      retry: 1,
+    },
+  },
+})
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </QueryClientProvider>
+  </React.StrictMode>,
+)
+----------------------------------------
+
+PLIK 2: src/App.tsx
+----------------------------------------
+import { Routes, Route } from 'react-router-dom'
+import Layout from './components/Layout'
+import ImportPage from './pages/ImportPage'
+import DatabasePage from './pages/DatabasePage'
+import BetFinderPage from './pages/BetFinderPage'
+import StrefaTyperaPage from './pages/StrefaTyperaPage'
+import AnalyticsPage from './pages/AnalyticsPage'
+
+function App() {
+  return (
+    <Layout>
+      <Routes>
+        <Route path="/" element={<BetFinderPage />} />
+        <Route path="/import" element={<ImportPage />} />
+        <Route path="/database" element={<DatabasePage />} />
+        <Route path="/bet-finder" element={<BetFinderPage />} />
+        <Route path="/strefa-typera" element={<StrefaTyperaPage />} />
+        <Route path="/analytics" element={<AnalyticsPage />} />
+      </Routes>
+    </Layout>
+  )
+}
+
+export default App
+----------------------------------------
+
+PLIK 3: src/vite-env.d.ts
+----------------------------------------
+/// <reference types="vite/client" />
+
+interface ImportMetaEnv {
+  readonly VITE_API_URL: string
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv
+}
+----------------------------------------
+
+PLIK 4: src/styles/global.css
+----------------------------------------
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --primary: #667eea;
+  --primary-dark: #5568d3;
+  --secondary: #764ba2;
+  --success: #48bb78;
+  --danger: #f56565;
+  --gray-100: #f3f4f6;
+  --gray-600: #4b5563;
+  --gray-900: #111827;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+  min-height: 100vh;
+  color: var(--gray-900);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.loading {
+  text-align: center;
+  padding: 40px;
+  color: var(--gray-600);
+}
+
+.spinner {
+  border: 3px solid var(--gray-100);
+  border-top: 3px solid var(--primary);
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 15px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+----------------------------------------
+
+PLIK 5: src/components/Layout.tsx
+----------------------------------------
+import { ReactNode } from 'react'
+import { Link, useLocation } from 'react-router-dom'
+import styles from './Layout.module.css'
+
+interface LayoutProps {
+  children: ReactNode
+}
+
+function Layout({ children }: LayoutProps) {
+  const location = useLocation()
+  
+  const tabs = [
+    { path: '/import', label: '📥 Import' },
+    { path: '/database', label: '🗄️ Baza Danych' },
+    { path: '/bet-finder', label: '🔍 Wyszukiwarka Typów' },
+    { path: '/strefa-typera', label: '📊 Strefa Typera' },
+    { path: '/analytics', label: '📈 Analityka' },
+  ]
+  
+  return (
+    <div className={styles.layout}>
+      <header className={styles.header}>
+        <h1>⚽ Bet Assistant 2.0</h1>
+        <p>System zarządzania danymi meczów piłkarskich</p>
+      </header>
+      
+      <nav className={styles.tabs}>
+        {tabs.map((tab) => (
+          <Link
+            key={tab.path}
+            to={tab.path}
+            className={`${styles.tabButton} ${
+              location.pathname === tab.path ? styles.active : ''
+            }`}
+          >
+            {tab.label}
+          </Link>
+        ))}
+      </nav>
+      
+      <main className={styles.main}>
+        {children}
+      </main>
+    </div>
+  )
+}
+
+export default Layout
+----------------------------------------
+
+PLIK 6: src/components/Layout.module.css
+----------------------------------------
+.layout {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  background: white;
+  padding: 20px 30px;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  margin: 20px;
+  margin-bottom: 0;
+}
+
+.header h1 {
+  color: #333;
+  font-size: 28px;
+  margin-bottom: 10px;
+}
+
+.header p {
+  color: #666;
+  font-size: 14px;
+}
+
+.tabs {
+  background: white;
+  margin: 20px;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  padding: 10px;
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.tabButton {
+  padding: 12px 24px;
+  background: transparent;
+  color: #666;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 8px;
+  transition: all 0.2s;
+  text-decoration: none;
+}
+
+.tabButton:hover {
+  background: #f7fafc;
+  color: #333;
+}
+
+.tabButton.active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.main {
+  flex: 1;
+  margin: 20px;
+  margin-top: 0;
+}
+----------------------------------------
+
+PLIK 7-11: Placeholder strony (wszystkie podobne)
+src/pages/ImportPage.tsx:
+----------------------------------------
+function ImportPage() {
+  return (
+    <div style={{ background: 'white', padding: '40px', borderRadius: '12px' }}>
+      <h2>📥 Import</h2>
+      <p>Funkcjonalność będzie zmigrowana ze starego projektu</p>
+    </div>
+  )
+}
+export default ImportPage
+----------------------------------------
+
+Powtórz dla: DatabasePage, BetFinderPage, StrefaTyperaPage, AnalyticsPage
+(zmień tylko emoji i tytuł)
+
+PO UTWORZENIU PLIKÓW:
+cd "D:\narzędzia\Bet Assistant 2.0"
+npm run dev
+
+Otwórz http://localhost:5173 - powinna być widoczna aplikacja!
+
+═══════════════════════════════════════════════════════════════════════════
+    SEKCJA 5: PLAN MIGRACJI - ETAPY
+═══════════════════════════════════════════════════════════════════════════
+
+ETAP 1: INFRASTRUKTURA (1-2h)
+□ API Client - przenieś logikę z stary/public/js/api/
+□ TypeScript types - na bazie stary/public/js/
+□ Zustand store - zastąp stary/public/js/config/state.js
+□ Utility functions - z stary/public/js/utils/
+
+ETAP 2: KOMPONENTY WSPÓŁDZIELONE (2-3h)
+□ Modal komponent (uniwersalny, zastąpi 15+ modali)
+□ Table komponent (do wyników wyszukiwania)
+□ Form components (inputs, selects, buttons)
+□ Toast notifications
+□ Loading spinners
+
+ETAP 3: IMPORT TAB (3-4h)
+Przenieś z: stary/public/index.html (tab-import)
+□ Countries list (wybór kraju)
+□ Leagues list (wybór lig)
+□ Summary statistics (liczby u góry)
+□ Import queue display
+□ Background jobs display
+□ Import dialog modal
+□ Quick date buttons
+□ API rate limit info
+
+ETAP 4: DATABASE TAB (2-3h)
+Przenieś z: stary/public/index.html (tab-database)
+□ Filter panel (kraj, liga, drużyna)
+□ Search inputs with autocomplete
+□ Results table
+□ Match details modal
+□ Team statistics panel
+□ Limit buttons (5, 10, 20, etc.)
+
+ETAP 5: BET FINDER TAB (5-7h) - NAJWAŻNIEJSZE
+Przenieś z: stary/public/index.html (tab-bet-finder)
+           stary/public/js/bet-finder.js (5562 linii!)
+
+PODZIAŁ:
+5.1 Interface kontrolny:
+□ Top results selector (TOP 5, 10, 15, 20)
+□ Match count selector (5, 10, 15, 20, 30, 50, all)
+□ Date range inputs
+□ Quick date buttons (dziś, jutro, pojutrze)
+
+5.2 Przyciski wyszukiwania (zgrupowane):
+□ Grupa "Rezultat" (1 przycisk)
+□ Grupa "Bramki" (6 przycisków)
+□ Grupa "Rożne" (7 przycisków)
+□ Grupa "Spalone" (4 przyciski)
+□ Grupa "Dom/Wyjazd" (6 przycisków)
+□ Grupa "Pierwsza połowa" (1 przycisk)
+
+5.3 Search Queue Panel:
+□ Kolejka wyszukiwań
+□ Current search info
+□ Cancel button
+□ Progress display
+
+5.4 Uniwersalny Modal wyników:
+□ Header z tytułem i zakresem dat
+□ Tabela wyników (dostosowana do typu wyszukiwania)
+□ Przyciski akcji (add to Bet Builder, watch, etc.)
+□ Match details expansion
+□ Auto-add types functionality
+
+5.5 Algorytmy wyszukiwania (do przepisania z bet-finder.js):
+□ calculateGoalStats()
+□ calculateFirstHalfStats()
+□ calculateCornerStats()
+□ calculateOffsidesStats()
+□ calculateWinLossStats()
+□ calculateHomeWinStats()
+□ calculateAwayWinStats()
+□ calculateBTSStats()
+□ calculateHandicapStats()
+... i wiele innych
+
+ETAP 6: STREFA TYPERA TAB (4-5h)
+Przenieś z: stary/public/index.html (tab-strefa-typera)
+□ Backfill section (uzupełnianie danych)
+□ Actions section (accept, verify, create coupon)
+□ Watched matches modal
+□ Team chance backfill
+□ Google Sheets integration controls
+
+ETAP 7: ANALYTICS PAGE (3-4h)
+Przenieś z: stary/public/analytics.html
+□ Summary cards (total bets, wins, losses)
+□ Filters section
+□ Charts (success rate, ROI)
+□ Statistics table
+□ Export functionality
+
+ETAP 8: STYLE I POLISH (2-3h)
+□ Przenieś wszystkie kolory ze stary/public/css/index.css
+□ Animations ze stary/public/css/animations.css
+□ Responsive adjustments (desktop only)
+□ Loading states
+□ Error states
+□ Empty states
+
+ETAP 9: INTEGRACJA Z BACKENDEM (2h)
+□ Test wszystkich API endpoints
+□ Error handling
+□ Loading states
+□ Cache strategies (React Query)
+
+ETAP 10: TESTING I BUGFIXY (3-4h)
+□ Test każdej zakładki
+□ Test wszystkich wyszukiwań Bet Finder
+□ Test modali
+□ Test formularzy
+□ Performance optimization
+
+SZACOWANY CZAS CAŁKOWITY: 25-35 godzin pracy
+
+═══════════════════════════════════════════════════════════════════════════
+    SEKCJA 6: MAPOWANIE PLIKÓW - CO GDZIE
+═══════════════════════════════════════════════════════════════════════════
+
+STARY PROJEKT → NOWY PROJEKT
+
+HTML/CSS:
+stary/public/index.html              → src/pages/*.tsx + Layout
+stary/public/analytics.html          → src/pages/AnalyticsPage.tsx
+stary/public/css/index.css           → src/styles/global.css + *.module.css
+stary/public/css/modals.css          → src/components/Modal.module.css
+stary/public/css/tables.css          → src/components/Table.module.css
+stary/public/css/forms.css           → src/components/Form.module.css
+
+JavaScript → React/TypeScript:
+stary/public/js/app.js               → src/pages/ImportPage.tsx + hooks
+stary/public/js/bet-finder.js        → src/pages/BetFinderPage.tsx + utils
+stary/public/js/watched-matches.js   → src/components/WatchedMatches.tsx
+stary/public/js/search-queue.js      → src/hooks/useSearchQueue.ts
+stary/public/js/config/state.js      → src/store/appStore.ts
+stary/public/js/api/*.js             → src/api/*.ts
+stary/public/js/utils/*.js           → src/utils/*.ts
+stary/public/js/ui/*.js              → src/components/*.tsx
+
+Config:
+stary/config/bet-conditions.json     → skopiuj do nowy/config/
+stary/public/modal-types-config.json → src/config/modalTypes.ts
+
+═══════════════════════════════════════════════════════════════════════════
+    SEKCJA 7: KLUCZOWE KOMPONENTY DO STWORZENIA
+═══════════════════════════════════════════════════════════════════════════
+
+PRIORYTET 1 (MUST HAVE):
+1. Modal - uniwersalny komponent modala
+2. Table - tabela z sortowaniem i filtrowaniem
+3. Button - przyciski z różnymi wariantami
+4. Input - pola tekstowe z walidacją
+5. Select - dropdowny z wyszukiwaniem
+6. DatePicker - wybór dat
+7. Toast - powiadomienia
+
+PRIORYTET 2 (SHOULD HAVE):
+8. SearchQueue - panel kolejki wyszukiwań
+9. StatCard - karty statystyk
+10. MatchCard - karta meczu
+11. LeagueSelector - wybór lig
+12. FilterPanel - panel filtrów
+13. ProgressBar - pasek postępu
+14. Badge - odznaki (status, liczby)
+
+PRIORYTET 3 (NICE TO HAVE):
+15. Chart - wykresy (może później)
+16. Tooltip - podpowiedzi
+17. Dropdown menu
+18. Tabs w modalach
+19. Accordion
+20. Pagination
+
+═══════════════════════════════════════════════════════════════════════════
+    SEKCJA 8: API ENDPOINTS - INTEGRACJA Z BACKENDEM
+═══════════════════════════════════════════════════════════════════════════
+
+Backend działa na: http://localhost:3000
+Proxy w vite: /api/* → http://localhost:3000
+
+GŁÓWNE ENDPOINTY (sprawdź w stary/server/):
+
+LEAGUES:
+GET  /api/leagues              - lista wszystkich lig
+POST /api/leagues/enable       - włącz ligę
+POST /api/leagues/disable      - wyłącz ligę
+GET  /api/leagues/enabled      - lista włączonych lig
+
+MATCHES:
+GET  /api/matches              - lista meczów (z filtrami)
+GET  /api/matches/:id          - szczegóły meczu
+POST /api/matches/import       - import meczów
+
+STATISTICS:
+GET  /api/stats/team/:name     - statystyki drużyny
+GET  /api/stats/league/:id     - statystyki ligi
+
+BET FINDER:
+POST /api/bet-finder/search    - wyszukiwanie typów
+
+BACKGROUND JOBS:
+GET  /api/background-jobs      - lista zadań
+POST /api/background-jobs      - nowe zadanie
+PUT  /api/background-jobs/:id  - update zadania
+
+ANALYTICS:
+GET  /api/analytics/summary    - podsumowanie
+GET  /api/analytics/bets       - lista zakładów
+
+═══════════════════════════════════════════════════════════════════════════
+    SEKCJA 9: WSKAZÓWKI I BEST PRACTICES
+═══════════════════════════════════════════════════════════════════════════
+
+REACT PATTERNS:
+✓ Używaj funkcyjnych komponentów (nie class components)
+✓ Custom hooks dla logiki biznesowej
+✓ Context tylko tam gdzie faktycznie potrzebny
+✓ Zustand dla globalnego state
+✓ React Query dla API calls i cache
+✓ CSS Modules dla stylów komponentów
+
+TYPESCRIPT:
+✓ Definiuj wszystkie typy w src/types/
+✓ Używaj interfaces zamiast types (convention)
+✓ Strict mode enabled
+✓ Unikaj 'any' - używaj 'unknown' jeśli nie znasz typu
+
+ORGANIZACJA KODU:
+✓ Jeden komponent = jeden plik
+✓ Maksymalnie 200-300 linii na komponent
+✓ Wydzielaj custom hooks jeśli logika > 50 linii
+✓ Grupuj powiązane funkcje w utils/
+✓ Komentarze JSDoc dla skomplikowanej logiki
+
+PERFORMANCE:
+✓ useMemo dla drogich obliczeń
+✓ useCallback dla funkcji przekazywanych do dzieci
+✓ React.memo dla komponentów często renderowanych
+✓ Lazy loading dla stron (React.lazy)
+✓ Virtual scrolling dla długich list
+
+STYLOWANIE:
+✓ CSS Variables dla kolorów i wielkości
+✓ CSS Modules dla komponentów
+✓ global.css tylko dla podstawowych reset i typography
+✓ Unikaj inline styles (tylko dla dynamicznych wartości)
+
+TESTOWANIE (opcjonalne):
+□ Vitest dla unit testów
+□ React Testing Library dla komponentów
+□ Playwright dla E2E (później)
+
+═══════════════════════════════════════════════════════════════════════════
+    SEKCJA 10: CZĘSTE PROBLEMY I ROZWIĄZANIA
+═══════════════════════════════════════════════════════════════════════════
+
+PROBLEM: "Failed to load url /src/main.tsx"
+ROZWIĄZANIE: Plik nie istnieje fizycznie. Utwórz go (zobacz SEKCJA 4)
+
+PROBLEM: "Module not found: Can't resolve './Component'"
+ROZWIĄZANIE: Sprawdź ścieżki importów, używaj @/ alias dla src/
+
+PROBLEM: "React is not defined"
+ROZWIĄZANIE: Dodaj: import React from 'react' (choć w React 18 nieobowiązkowe)
+
+PROBLEM: Serwer Vite crashuje po zapisie pliku
+ROZWIĄZANIE: Błąd TypeScript/składni. Sprawdź terminal i napraw błędy.
+
+PROBLEM: Proxy nie działa (/api zwraca 404)
+ROZWIĄZANIE: Upewnij się że backend działa na localhost:3000
+
+PROBLEM: CSS Modules nie działają
+ROZWIĄZANIE: Nazwa pliku musi kończyć się .module.css
+
+PROBLEM: React Query pokazuje błędy
+ROZWIĄZANIE: Sprawdź czy QueryClientProvider opatuje całą aplikację
+
+PROBLEM: Zustand state się nie aktualizuje
+ROZWIĄZANIE: Używaj set() funkcji, nie mutuj stanu bezpośrednio
+
+PROBLEM: Polskie znaki w ścieżkach
+ROZWIĄZANIE: Unikaj 'ę' w ścieżkach, używaj pełnych ścieżek absolutnych
+
+═══════════════════════════════════════════════════════════════════════════
+    SEKCJA 11: CHECKLISTY KONTROLNE
+═══════════════════════════════════════════════════════════════════════════
+
+CHECKLIST: PRZED ROZPOCZĘCIEM ETAPU
+□ Serwer dev działa (npm run dev)
+□ Poprzedni etap ukończony i przetestowany
+□ Stworzyłem branch w git (opcjonalnie)
+□ Zidentyfikowałem pliki do migracji
+□ Przeczytałem kod ze starego projektu
+
+CHECKLIST: PO UKOŃCZENIU KOMPONENTU
+□ Komponent renderuje się bez błędów
+□ TypeScript nie pokazuje błędów
+□ Style wyglądają poprawnie
+□ Funkcjonalność działa jak oczekiwano
+□ Obsłużone loading/error states
+□ Skomentowany skomplikowany kod
+
+CHECKLIST: PO UKOŃCZENIU ETAPU
+□ Wszystkie komponenty z etapu działają
+□ API integracja działa (jeśli dotyczy)
+□ Style są spójne z resztą aplikacji
+□ Brak ostrzeżeń w konsoli
+□ Przetestowane ręcznie główne scenariusze
+□ Commit zmian (jeśli używasz git)
+
+CHECKLIST: PRZED FINALNYM WDROŻENIEM
+□ Wszystkie etapy ukończone
+□ npm run build przechodzi bez błędów
+□ Przetestowane wszystkie główne funkcje
+□ Backend działa poprawnie
+□ Brak błędów w konsoli przeglądarki
+□ Brak błędów TypeScript
+□ Performance akceptowalne (React DevTools)
+□ README.md zaktualizowane
+
+═══════════════════════════════════════════════════════════════════════════
+    SEKCJA 12: PRZYDATNE KOMENDY
+═══════════════════════════════════════════════════════════════════════════
+
+PODSTAWOWE:
+npm run dev          - uruchom dev server (port 5173)
+npm run build        - build produkcyjny
+npm run preview      - preview buildu
+npm run lint         - sprawdź błędy TypeScript
+
+GIT (jeśli używasz):
+git add .
+git commit -m "feat: dodaj komponent X"
+git push
+
+DEBUGGING:
+- Otwórz React DevTools w przeglądarce
+- Sprawdź zakładkę Network dla API calls
+- Console.log dla szybkiego debugowania
+- React Query DevTools (dodaj jeśli potrzeba)
+
+SPRAWDZANIE PLIKÓW:
+dir src              - lista plików w src
+dir /s *.tsx         - wszystkie pliki .tsx rekursywnie
+Get-Content plik.tsx - wyświetl zawartość pliku
+
+═══════════════════════════════════════════════════════════════════════════
+    SEKCJA 13: KONTAKT I PYTANIA
+═══════════════════════════════════════════════════════════════════════════
+
+MASZ PYTANIA?
+- Pytaj śmiało! Lepiej zapytać niż zgadywać.
+- Jeśli coś niejasne - sprawdź stary kod jako referencję
+- Dokumentacja: React, TypeScript, Vite, TanStack Query, Zustand
+
+STUCK? PROBLEMY?
+1. Sprawdź konsolę przeglądarki
+2. Sprawdź terminal (błędy TypeScript/Vite)
+3. Przeczytaj sekcję 10 (Częste problemy)
+4. Sprawdź czy backend działa
+5. Zapytaj użytkownika
+
+GDZIE SZUKAĆ POMOCY:
+- React: https://react.dev
+- TypeScript: https://www.typescriptlang.org/docs
+- Vite: https://vitejs.dev
+- TanStack Query: https://tanstack.com/query
+- Zustand: https://github.com/pmndrs/zustand
+
+═══════════════════════════════════════════════════════════════════════════
+    SEKCJA 14: PIERWSZE ZADANIE - START
+═══════════════════════════════════════════════════════════════════════════
+
+TWOJE PIERWSZE KROKI:
+
+1. Przeczytaj cały ten dokument (tak, cały!)
+2. Otwórz projekt w VS Code
+3. Uruchom npm run dev
+4. Sprawdź czy aplikacja działa na localhost:5173
+5. Jeśli NIE - napraw używając SEKCJI 4
+6. Jeśli TAK - rozpocznij ETAP 1 (SEKCJA 5)
+
+KOMUNIKACJA:
+- Informuj użytkownika o postępach po każdym etapie
+- Pytaj o priorytety jeśli coś niejasne
+- Pokazuj screen'y jeśli coś nie działa
+- Commituj często (jeśli używacie git)
+
+POWODZENIA! 🚀
+
+Pamiętaj: Kod ze starego projektu jest w folderze ./stary/
+Backend NIE zmienia się - tylko frontend.
+Pytaj jeśli coś niejasne!
+
+================================================================================
+    KONIEC INSTRUKCJI
+    Sukcesu w migracji! ⚽
+================================================================================

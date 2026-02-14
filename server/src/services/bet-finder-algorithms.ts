@@ -4,8 +4,65 @@
  */
 
 import { PrismaClient } from '@prisma/client'
+import * as fs from 'fs'
+import * as path from 'path'
 
 const prisma = new PrismaClient()
+
+// Cache for league links
+let leagueLinksCache: Map<string, { superbet: string; flashscore: string }> | null = null
+
+/**
+ * Load league links from CSV file
+ */
+function loadLeagueLinks(): Map<string, { superbet: string; flashscore: string }> {
+  if (leagueLinksCache) {
+    return leagueLinksCache
+  }
+
+  const csvPath = path.join(process.cwd(), 'files', 'Lista rozgrywek.csv')
+  
+  if (!fs.existsSync(csvPath)) {
+    console.warn('[Bet Finder] Lista rozgrywek.csv not found, links will be empty')
+    leagueLinksCache = new Map()
+    return leagueLinksCache
+  }
+
+  const csvContent = fs.readFileSync(csvPath, 'utf-8')
+  const lines = csvContent.split('\n')
+  const linksMap = new Map<string, { superbet: string; flashscore: string }>()
+
+  // Skip header line
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim()
+    if (!line) continue
+
+    const parts = line.split(',').map(p => p.trim())
+    if (parts.length >= 5) {
+      const country = parts[1]
+      const league = parts[2]
+      const superbet = parts[3] || ''
+      const flashscore = parts[4] || ''
+
+      // Create key: "Country - League"
+      const key = `${country} - ${league}`
+      linksMap.set(key, { superbet, flashscore })
+    }
+  }
+
+  console.log(`[Bet Finder] Loaded ${linksMap.size} league links from CSV`)
+  leagueLinksCache = linksMap
+  return linksMap
+}
+
+/**
+ * Get links for a specific league
+ */
+function getLeagueLinks(country: string, league: string): { superbet: string; flashscore: string } {
+  const linksMap = loadLeagueLinks()
+  const key = `${country} - ${league}`
+  return linksMap.get(key) || { superbet: '', flashscore: '' }
+}
 
 export interface SearchParams {
   dateFrom: string // YYYY-MM-DD
@@ -42,6 +99,8 @@ export interface SearchResult {
   drawOdds?: number
   awayOdds?: number
   recommendation: string
+  superbetLink?: string
+  flashscoreLink?: string
 }
 
 /**
@@ -234,6 +293,9 @@ export async function searchWinnerVsLoser(params: SearchParams): Promise<SearchR
         }
       }
 
+      // Get league links
+      const links = getLeagueLinks(match.country, match.league)
+
       results.push({
         matchId: match.id,
         homeTeam: match.home_team,
@@ -248,6 +310,8 @@ export async function searchWinnerVsLoser(params: SearchParams): Promise<SearchR
         drawOdds: match.draw_odds,
         awayOdds: match.away_odds,
         recommendation,
+        superbetLink: links.superbet,
+        flashscoreLink: links.flashscore,
       })
     } catch (error) {
       console.error(`Error processing match ${match.home_team} vs ${match.away_team}:`, error)

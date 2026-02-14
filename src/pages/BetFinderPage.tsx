@@ -220,16 +220,11 @@ function BetFinderPage() {
   
   // Map search type to bet type and option
   const mapSearchTypeToBet = (searchType: string, result: SearchResult): { betType: string; betOption: string } => {
-    // Map search type to specific bet based on algorithm logic
+    // Simple mapping for Winner vs Loser
+    // TODO: Load from modal-types-config.json for full implementation
     switch (searchType) {
       case 'winner-vs-loser':
-        // Algorithm analyzes both scenarios and puts info in recommendation
-        // Check recommendation to determine if bet should be on home (1) or away (2)
-        if (result.recommendation.includes('Zakład: 2') || result.recommendation.includes('przewaga gości')) {
-          return { betType: '2', betOption: '-' } // Away win
-        } else {
-          return { betType: '1', betOption: '-' } // Home win
-        }
+        return { betType: '1', betOption: '-' } // Home win
       
       case 'most-goals':
         return { betType: 'Over', betOption: '2.5' }
@@ -405,7 +400,7 @@ function BetFinderPage() {
   // Bet type groups from step 8
   const betTypeGroups = {
     result: [
-      { id: 'winner-vs-loser', label: '🏆 Wygrane vs Przegrane', description: 'Jedna drużyna wygrywa często, druga przegrywa często (auto: 1 lub 2)' }
+      { id: 'winner-vs-loser', label: '🏆 Wygrane vs Przegrane', description: 'Drużyna z najwyższym % wygranych vs drużyna z najwyższym % przegranych' }
     ],
     goals: [
       { id: 'most-goals', label: '⚽ Najwięcej bramek', description: 'Obie drużyny mają najwyższą średnią bramek' },
@@ -545,12 +540,12 @@ function BetFinderPage() {
         </div>
       </div>
 
-      {/* Search Queue - Active */}
+      {/* Search Queue */}
       <div className={styles.section}>
-        <h3>⏳ Aktywne wyszukiwania</h3>
-        {searchQueue.filter(job => job.status !== 'completed' || !isJobImported(job.id)).length === 0 ? (
+        <h3>Kolejka wyszukiwań</h3>
+        {searchQueue.length === 0 ? (
           <div className={styles.emptyQueue}>
-            <p>📭 Brak aktywnych wyszukiwań</p>
+            <p>📭 Brak wyszukiwań w kolejce</p>
             <p className={styles.emptyQueueHint}>
               Użyj przycisku "Automatycznie dodaj typy" aby dodać wyszukiwania do kolejki.
               Wyniki zostaną automatycznie zaimportowane do arkusza Google Sheets po zakończeniu.
@@ -558,9 +553,7 @@ function BetFinderPage() {
           </div>
         ) : (
           <div className={styles.queueList}>
-            {searchQueue
-              .filter(job => job.status !== 'completed' || !isJobImported(job.id))
-              .map(item => (
+            {searchQueue.map(item => (
               <div key={item.id} className={styles.queueItem}>
                 <div className={styles.queueItemHeader}>
                   <span className={styles.queueItemType}>{translateSearchType(item.searchType)}</span>
@@ -586,68 +579,6 @@ function BetFinderPage() {
                     </div>
                   )}
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Search Queue - Completed */}
-      <div className={styles.section}>
-        <div className={styles.sectionHeaderWithButton}>
-          <h3>✅ Zakończone wyszukiwania</h3>
-          {searchQueue.filter(job => job.status === 'completed' && isJobImported(job.id)).length > 0 && (
-            <button
-              onClick={async () => {
-                if (confirm('Czy na pewno chcesz wyczyścić historię zakończonych wyszukiwań?')) {
-                  const completedJobs = searchQueue.filter(job => job.status === 'completed' && isJobImported(job.id))
-                  for (const job of completedJobs) {
-                    await deleteJob(job.id)
-                  }
-                  await loadSearchQueue()
-                }
-              }}
-              className={styles.clearHistoryButton}
-              title="Wyczyść historię zakończonych"
-            >
-              🗑️ Wyczyść historię
-            </button>
-          )}
-        </div>
-        {searchQueue.filter(job => job.status === 'completed' && isJobImported(job.id)).length === 0 ? (
-          <div className={styles.emptyQueue}>
-            <p>📭 Brak zakończonych wyszukiwań</p>
-          </div>
-        ) : (
-          <div className={styles.queueList}>
-            {searchQueue
-              .filter(job => job.status === 'completed' && isJobImported(job.id))
-              .map(item => (
-              <div key={item.id} className={`${styles.queueItem} ${styles.queueItemCompleted}`}>
-                <div className={styles.queueItemHeader}>
-                  <span className={styles.queueItemType}>{translateSearchType(item.searchType)}</span>
-                  <span className={`${styles.queueItemStatus} ${styles.statuscompleted}`}>
-                    ✅ Zaimportowano
-                  </span>
-                </div>
-                <div className={styles.queueItemDetails}>
-                  <div>Utworzono: {new Date(item.createdAt).toLocaleString('pl-PL')}</div>
-                  {item.results && (
-                    <div className={styles.resultsCount}>
-                      📊 Znaleziono: {item.results.length} typów
-                    </div>
-                  )}
-                </div>
-                <button
-                  onClick={async () => {
-                    await deleteJob(item.id)
-                    await loadSearchQueue()
-                  }}
-                  className={styles.deleteButton}
-                  title="Usuń z historii"
-                >
-                  🗑️
-                </button>
               </div>
             ))}
           </div>

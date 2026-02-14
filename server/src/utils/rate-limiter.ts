@@ -124,16 +124,32 @@ export class RateLimiter {
 	 */
 	recordRequest(): void {
 		const today = new Date().toISOString().split('T')[0]
+		const currentHour = this.getCurrentHour()
 
 		// Reset if new day
 		if (this.data.date !== today) {
 			this.data = this.createNewData()
 		}
 
+		// Clean old hours (keep only last 24 hours)
+		const now = new Date()
+		const currentTime = now.getTime()
+		const oneHourAgo = currentTime - (60 * 60 * 1000)
+		
+		// Remove hourly counts older than 1 hour
+		for (const hour in this.data.hourlyRequests) {
+			const hourNum = parseInt(hour)
+			const hourDate = new Date(now)
+			hourDate.setHours(hourNum, 0, 0, 0)
+			
+			// If this hour is more than 1 hour old, remove it
+			if (hourDate.getTime() < oneHourAgo) {
+				delete this.data.hourlyRequests[hour]
+			}
+		}
+
 		// Increment counters
 		this.data.requests++
-
-		const currentHour = this.getCurrentHour()
 		this.data.hourlyRequests[currentHour] = (this.data.hourlyRequests[currentHour] || 0) + 1
 
 		this.saveData()

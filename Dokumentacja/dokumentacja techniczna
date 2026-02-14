@@ -1,7 +1,7 @@
 # DOKUMENTACJA TECHNICZNA - BET ASSISTANT 2.0
 
-**Data aktualizacji:** 30 grudnia 2025  
-**Wersja:** 1.0 (Inicjalizacja projektu)
+**Data aktualizacji:** 14 lutego 2026  
+**Wersja:** 1.3 (Database Browser - Full CRUD Operations)
 
 ---
 
@@ -36,7 +36,9 @@ D:\narzędzia\Bet Assistant 2.0\
 │   │   ├── analytics.ts         # /api/analytics/*
 │   │   ├── import-jobs.ts       # /api/import-jobs/*
 │   │   ├── strefa-typera.ts     # /api/strefa-typera/*
-│   │   └── verify-bets.ts       # /api/verify-bets/*
+│   │   ├── verify-bets.ts       # /api/verify-bets/*
+│   │   ├── bet-finder.ts        # ✅ /api/bet-finder/*
+│   │   └── database.ts          # ✅ /api/database/* (Database Browser)
 │   │
 │   ├── scripts/                  # Utility scripts
 │   │   ├── backup-database.ts
@@ -48,7 +50,10 @@ D:\narzędzia\Bet Assistant 2.0\
 │   │   ├── services/            # Business logic
 │   │   │   ├── api-football-client.ts
 │   │   │   ├── data-importer.ts
-│   │   │   └── league-selector.ts
+│   │   │   ├── league-selector.ts
+│   │   │   ├── bet-finder-algorithms.ts  # ✅ Algorytmy wyszukiwania
+│   │   │   ├── bet-finder-service.ts     # ✅ Zarządzanie kolejką
+│   │   │   └── database-browser.ts       # ✅ Universal PostgreSQL Browser
 │   │   ├── types/               # TypeScript types
 │   │   └── utils/               # Helper functions
 │   │
@@ -72,7 +77,8 @@ D:\narzędzia\Bet Assistant 2.0\
 │   │
 │   ├── pages/                     # Strony aplikacji (routing)
 │   │   ├── ImportPage.tsx        # Zakładka Import
-│   │   ├── DatabasePage.tsx      # Zakładka Baza Danych
+│   │   ├── DatabasePage.tsx      # ✅ Zakładka Baza Danych (Universal PostgreSQL Browser)
+│   │   ├── DatabasePage.module.css  # ✅ Style dla Database Browser
 │   │   ├── BetFinderPage.tsx     # Zakładka Wyszukiwarka Typów
 │   │   ├── StrefaTyperaPage.tsx  # Zakładka Strefa Typera
 │   │   └── AnalyticsPage.tsx     # Zakładka Analityka
@@ -1080,6 +1086,7 @@ style: formatowanie
   - Paski postępu dla aktywnych zadań
   - Toggle ukrytych/aktywnych zadań
   - Obsługa błędów i rate limitów
+  - **URL params dla automatycznego otwierania modala** (cross-page navigation)
 - ✅ **Krok 3: Obsługa aktywnego zadania**
   - Przyciski akcji: Wstrzymaj, Wznów, Zakończ
   - Integracja z API: `/api/import-jobs/:id/pause`, `/resume`, `/delete`
@@ -1198,6 +1205,701 @@ style: formatowanie
 
 **Następny krok:** Przekazanie projektu do nowego agenta dla implementacji logiki wyszukiwania
 
+**31 grudnia 2025 - 17:00:**
+
+- ✅ **Bet Finder - Backend Implementation (Algorytm: Winner vs Loser)**
+  - **Utworzono:** `server/src/services/bet-finder-algorithms.ts` (305 linii)
+    - Algorytm `searchWinnerVsLoser()` - wyszukuje mecze gdzie gospodarz często wygrywa, gość często przegrywa
+    - Funkcje pomocnicze: `getUpcomingMatches()`, `getTeamHistory()`, `calculateTeamStats()`
+    - Router `searchByType()` dla różnych algorytmów (16 typów - większość TODO)
+  - **Utworzono:** `server/src/services/bet-finder-service.ts` (107 linii)
+    - Zarządzanie kolejką wyszukiwań (in-memory storage)
+    - Funkcje: `createSearchJob()`, `processJob()`, `getAllSearchJobs()`, `getSearchJob()`, `deleteSearchJob()`, `clearCompletedJobs()`
+    - Auto-processing zadań w tle
+  - **Utworzono:** `server/routes/bet-finder.ts` (150 linii)
+    - API endpoints:
+      - `POST /api/bet-finder/search` - tworzy wyszukiwania dla wielu typów
+      - `GET /api/bet-finder/queue` - pobiera kolejkę
+      - `GET /api/bet-finder/queue/:id` - szczegóły zadania
+      - `DELETE /api/bet-finder/queue/:id` - usuwa zadanie
+      - `POST /api/bet-finder/queue/clear` - czyści ukończone
+  - **Zmodyfikowano:** `server/league-config-server.ts`
+    - Dodano import i routing dla `betFinderRouter`
+- ✅ **Bet Finder - Frontend Integration**
+  - **Zmodyfikowano:** `src/pages/BetFinderPage.tsx`
+    - Funkcja `loadSearchQueue()` - pobiera kolejkę z API
+    - Funkcja `addToQueue()` - wysyła wyszukiwania do backendu (POST /api/bet-finder/search)
+    - Auto-refresh co 5 sekund (useEffect + setInterval)
+    - Tłumaczenie typów i statusów na polski (`translateSearchType()`, `translateStatus()`)
+    - Wyświetlanie liczby wyników dla ukończonych zadań
+    - Wyświetlanie komunikatów błędów
+  - **Zmodyfikowano:** `src/pages/BetFinderPage.module.css`
+    - Dodano style: `.resultsCount`, `.errorMessage`
+- ✅ **Dokumentacja**
+  - Utworzono: `Dokumentacja/Bet Finder - Winner vs Loser - Implementacja.md` (pełny opis algorytmu, API, flow)
+- ✅ **Testowanie**
+  - Backend działa na localhost:3000
+  - Frontend działa na localhost:5174
+  - Integracja działa end-to-end
+
+**Następny krok:** Implementacja pozostałych 15 algorytmów wyszukiwania
+
+**14 lutego 2026 - 16:30:**
+
+- ✅ **Database Browser - Universal PostgreSQL Interface**
+  - **Utworzono:** `server/src/services/database-browser.ts` (369 linii)
+    - Klasa `DatabaseBrowserService` z dynamic connection pooling
+    - Metody:
+      - `listDatabases()` - lista wszystkich baz w PostgreSQL
+      - `listTables(db)` - lista tabel z liczbą wierszy i rozmiarem
+      - `getTableSchema(db, table)` - schemat kolumn, PK, FK
+      - `queryTableData(db, table, options)` - zapytania z filtrami, sortowaniem, paginacją
+    - Multi-database support (dynamiczne połączenia poza Prisma)
+    - Multi-column sorting (ORDER BY col1, col2, col3...)
+    - Walidacja i error handling
+  - **Utworzono:** `server/routes/database.ts` (109 linii)
+    - API endpoints:
+      - `GET /api/database/list` - lista baz danych + defaultDatabase
+      - `GET /api/database/:db/tables` - lista tabel w bazie
+      - `GET /api/database/:db/tables/:table/schema` - schemat tabeli
+      - `POST /api/database/:db/tables/:table/query` - zapytanie z filtrami
+    - Detailed logging dla debugowania
+  - **Zmodyfikowano:** `server/league-config-server.ts`
+    - Dodano import i routing dla `databaseRouter`
+  - **Zmodyfikowano:** `package.json`
+    - Dodano: `pg: ^8.13.1`, `@types/pg: ^8.11.10`
+- ✅ **Database Browser - Frontend (React + CSS Modules)**
+  - **Utworzono:** `src/pages/DatabasePage.tsx` (792 linie)
+    - Funkcjonalności:
+      - **Multi-database selector** - wybór bazy danych z listy
+      - **Table browser** - lista tabel z liczbą wierszy i rozmiarem
+      - **Dynamic schema** - automatyczne wykrywanie kolumn, typów, PK, FK
+      - **Intelligent sorting** - Excel-like (Click: single sort, Shift+Click: multi-sort)
+      - **Column reordering** - is_finished na pozycji 4 dla tabeli matches
+      - **Smart filtering** - dynamiczne operatory według typu kolumny
+      - **Global search** - przeszukiwanie wszystkich kolumn tekstowych
+      - **Pagination** - 100/500 rekordów na stronę
+      - **Type-aware rendering** - formatowanie dat, boolean, JSON, liczb
+      - **Visual indicators** - ikony dla PK (🔑), FK (🔗), typów danych
+      - **Debounced input** - 1s delay dla search/filters (UX optimization)
+      - **Focus preservation** - input pozostaje aktywny po reload
+      - **Conditional styling** - is_finished: yes=zielony, no=niebieski
+    - State management: 15+ useState hooks
+    - Custom helpers:
+      - `getDefaultSortColumn()` - inteligentny wybór kolumny (date → PK → first)
+      - `renderCellValue()` - formatowanie wartości według typu
+      - `getColumnTypeIcon()` - ikony dla typów kolumn
+      - `getCellClassName()` - warunkowe CSS classes
+      - `reorderColumns()` - przesunięcie kolumn dla matches table
+    - Debouncing pattern: searchTerm → 1000ms → debouncedSearchTerm → API
+  - **Utworzono:** `src/pages/DatabasePage.module.css` (545 linii)
+    - Gradient header design (purple-blue)
+    - Fixed horizontal headers (writing-mode fix)
+    - Sticky horizontal scroll (position: sticky, bottom: 0)
+    - Max-height table wrapper (calc(100vh - 350px))
+    - Primary key cells (gold background)
+    - Foreign key cells (blue background)
+    - Conditional styles:
+      - `.finishedYes` - zielone tło dla is_finished=yes
+      - `.finishedNo` - niebieskie tło dla is_finished=no
+    - Sort indicators (strzałki + numerki w kółkach)
+    - Loading overlay z blur backdrop
+    - Responsive design (mobile breakpoints)
+- ✅ **Database Browser - UX Features**
+  - **Excel-like sorting:**
+    - Click: sortuj tylko po tej kolumnie (reset poprzedniego)
+    - Shift+Click: dodaj kolumnę do multi-sort
+    - Toggle ASC/DESC przy ponownym kliknięciu
+    - Wizualizacja: ↑↓ + numerki ① ② ③
+  - **Search optimization:**
+    - 1000ms debounce delay (zmniejsza liczbę API calls)
+    - Focus preservation (kursor pozostaje w input po reload)
+    - Auto-clear przy zmianie tabeli/bazy
+  - **Smart defaults:**
+    - Auto-load 100 najnowszych rekordów po wyborze tabeli
+    - Domyślne sortowanie: data → PK → first column (DESC)
+  - **Tooltips:**
+    - Typ kolumny, nullable, default, FK references
+    - "Click: sort | Shift+Click: add to multi-sort"
+- ✅ **Testing & Debugging**
+  - Backend: SQL query logging (🔍 Generated SQL Query)
+  - Frontend: Error handling + error banner
+  - Multi-database queries verified (bet_assistant, postgres, template1)
+  - Multi-column sorting tested (country → league → date)
+  - Rate limit handling: 1s debounce eliminuje excessive requests
+
+**Flow - User klika w kolumnę (sortowanie):**
+
+```
+User Click Event
+  │
+  ├─> handleSort(columnName, event)
+  │   │
+  │   ├─> event.shiftKey?
+  │   │   │
+  │   │   YES → Multi-sort mode
+  │   │   │   ├─> Column exists? → Toggle direction
+  │   │   │   └─> Column new? → Add to sortColumns[]
+  │   │   │
+  │   │   NO → Single-sort mode
+  │   │       ├─> Same column? → Toggle direction
+  │   │       └─> Different? → Reset to new column
+  │   │
+  │   └─> setSortColumns([...]) + setCurrentPage(1)
+  │
+  ├─> useEffect [sortColumnsKey]
+  │   └─> loadTableData()
+  │       │
+  │       ├─> Save activeElement (focus preservation)
+  │       ├─> POST /api/database/:db/tables/:table/query
+  │       │   Body: { sortColumns: [{column, direction}, ...], filters, search, page }
+  │       │
+  │       └─> Backend: DatabaseBrowserService.queryTableData()
+  │           │
+  │           ├─> Build ORDER BY clause
+  │           │   ORDER BY "col1" ASC, "col2" DESC, "col3" ASC
+  │           │
+  │           ├─> Execute SQL query
+  │           │
+  │           └─> Return: { rows, totalCount, page, totalPages }
+  │
+  └─> UI Update
+      ├─> Render rows with reordered columns
+      ├─> Show sort indicators (↑↓ + ① ② ③)
+      └─> Restore focus to activeElement
+```
+
+**API Endpoints Table:**
+
+| Method | Endpoint | Description | Response |
+|--------|---------|-------------|----------|
+| GET | `/api/database/list` | Lista wszystkich baz danych | `{ databases: DatabaseInfo[], defaultDatabase: string }` |
+| GET | `/api/database/:db/tables` | Lista tabel w bazie | `{ tables: TableInfo[] }` |
+| GET | `/api/database/:db/tables/:table/schema` | Schemat kolumn tabeli | `TableSchema` (columns, primaryKeys, foreignKeys) |
+| POST | `/api/database/:db/tables/:table/query` | Zapytanie z filtrami i sortowaniem | `QueryResult` (rows, totalCount, page, totalPages) |
+
+**TypeScript Interfaces:**
+
+```typescript
+interface DatabaseInfo {
+  name: string
+  size?: string
+  tables?: number
+}
+
+interface TableInfo {
+  name: string
+  schema: string
+  rows?: number
+  size?: string
+}
+
+interface ColumnInfo {
+  name: string
+  type: string
+  nullable: boolean
+  default: string | null
+  isPrimaryKey: boolean
+  isForeignKey: boolean
+  foreignKeyTable?: string
+  foreignKeyColumn?: string
+}
+
+interface QueryResult {
+  rows: any[]
+  totalCount: number
+  page: number
+  pageSize: number
+  totalPages: number
+}
+```
+
+**14 lutego 2026 - 18:00:**
+
+- ✅ **Database Browser - CRUD Operations (Etap 2)**
+  - **Zaktualizowano:** `server/src/services/database-browser.ts` (464 linie)
+    - Nowe metody:
+      - `insertRecord(db, table, schema, data)` - INSERT INTO z RETURNING *
+        - Parametryzowane zapytania ($1, $2, $3...)
+        - Automatyczne kolumny i placeholders
+        - Zwraca wstawiony rekord
+      - `updateRecord(db, table, schema, primaryKey, data)` - UPDATE SET WHERE
+        - Walidacja primary key
+        - SET clause z parametrami
+        - Zwraca zaktualizowany rekord (RETURNING *)
+      - `deleteRecords(db, table, schema, primaryKey)` - DELETE WHERE IN (bulk)
+        - Wspiera usuwanie wielu rekordów naraz
+        - Zwraca rowCount (liczba usuniętych)
+    - Logging dla każdej operacji (📝 Insert, ✏️ Update, 🗑️ Delete)
+  - **Zaktualizowano:** `server/routes/database.ts` (189 linii)
+    - Nowe endpointy:
+      - `POST /api/database/:db/tables/:table/insert` - dodawanie rekordu
+      - `PUT /api/database/:db/tables/:table/update` - edycja rekordu
+      - `DELETE /api/database/:db/tables/:table/delete` - usuwanie rekordów
+    - Walidacja danych wejściowych (400 Bad Request)
+    - Error handling z szczegółowymi komunikatami
+  - **Zaktualizowano:** `src/pages/DatabasePage.tsx` (1236 linii)
+    - Nowy state:
+      - `selectedRows: Set<any>` - zaznaczone rekordy (checkboxy)
+      - `showInsertModal`, `showUpdateModal`, `showDeleteModal`
+      - `editingRow` - rekord do edycji
+      - `crudLoading` - loading state dla operacji CRUD
+    - Nowe handlery:
+      - `handleToggleRow(row)` - zaznacz/odznacz rekord
+      - `handleToggleAllRows()` - zaznacz/odznacz wszystkie
+      - `handleOpenInsertModal()` - otwórz modal INSERT
+      - `handleOpenUpdateModal(row)` - otwórz modal UPDATE
+      - `handleOpenDeleteModal()` - otwórz modal DELETE
+      - `handleInsertRecord(data)` - wysłanie POST request
+      - `handleUpdateRecord(data)` - wysłanie PUT request
+      - `handleDeleteRecords()` - wysłanie DELETE request
+      - `handleFinishedCellClick(row)` - otwórz Import dla pojedynczego meczu (NOWY 14.02.2026)
+      - `handleUpdateSelected()` - otwórz Import dla wielu meczów (NOWY 14.02.2026)
+      - `getPrimaryKeyValue(row)` - pomocnik dla PK
+    - UI Components:
+      - **Checkbox column** - zaznaczanie rekordów
+        - Header checkbox: Select/Deselect all
+        - Row checkboxes: individual selection
+      - **Actions column** - przyciski Edit 📝 / Delete 🗑️
+        - Sticky position (zawsze widoczna po prawej)
+        - Edit button → otwiera UPDATE modal
+        - Delete button → otwiera DELETE modal
+      - **CRUD Actions buttons** - nad tabelą
+        - "➕ Insert New Record" (zielony gradient)
+        - "� Update Selected (X)" (pomarańczowy gradient) - NOWY 14.02.2026
+        - "�🗑️ Delete Selected (X)" (czerwony gradient)
+      - **RecordModal** - component dla INSERT/UPDATE
+        - Dynamic form based on table schema
+        - Type-specific inputs:
+          - text/varchar → text input
+          - int/numeric → number input
+          - date → date picker
+          - timestamp → datetime-local
+          - boolean → checkbox
+          - json → textarea (4 rows)
+        - Validation:
+          - Required fields (NOT NULL columns)
+          - Read-only PK in UPDATE mode
+          - Foreign key hints
+        - Default values from schema
+      - **DeleteModal** - confirmation dialog
+        - Shows count of selected records
+        - Warning: "This action cannot be undone"
+        - Cancel / Delete buttons
+    - Selected row highlight (niebieski background)
+    - Success/Error alerts
+    - Auto-reload po każdej operacji
+  - **Zaktualizowano:** `src/pages/DatabasePage.module.css` (897 linii)
+    - CRUD styles:
+      - `.crudActions` - flex container dla przycisków
+      - `.btnInsert` - zielony gradient (emerald)
+      - `.btnWarning` - pomarańczowy gradient (amber) - NOWY 14.02.2026
+      - `.btnDelete` - czerwony gradient (red)
+      - `.btnEdit`, `.btnDeleteSingle` - małe przyciski w Actions
+      - `.checkboxColumn`, `.checkboxCell` - kolumna checkbox (40px)
+      - `.actionsColumn`, `.actionsCell` - kolumna Actions (100px, sticky)
+      - `.selectedRow` - niebieski highlight dla zaznaczonych
+    - Modal styles:
+      - `.modalOverlay` - półprzezroczyste tło (rgba(0,0,0,0.5))
+      - `.modalContent` - white card (600px max-width, 80vh max-height)
+      - `.modalHeader` - gradient header
+      - `.modalBody` - scrollable content
+      - `.modalFooter` - flex buttons
+      - Animations: fadeIn (overlay), slideInDown (content)
+    - Form styles:
+      - `.formField`, `.formLabel`, `.formInput`
+      - `.formTextarea` - dla JSON columns
+      - `.formCheckbox` - dla boolean
+      - `.fkHint` - foreign key info
+      - `.warningText` - red warning (DELETE modal)
+      - `.required` - red asterisk (*)
+    - Button styles:
+      - `.btnCancel` - white/gray border
+      - `.btnSave` - blue gradient
+      - `.btnConfirmDelete` - red gradient
+      - Hover effects: translateY(-2px) + shadow
+- ✅ **Testing & UX**
+  - Insert/Update/Delete tested across multiple tables
+  - Type-specific inputs render correctly
+  - Validation works (required fields, PK constraints)
+  - Foreign key hints display properly
+  - Bulk delete with checkbox selection works
+  - Error handling with user-friendly alerts
+  - Loading states during CRUD operations
+  - Auto-reload keeps current page/filters
+  - Focus preservation maintained
+
+**API Endpoints Table (Updated):**
+
+| Method | Endpoint | Description | Response |
+|--------|---------|-------------|----------|
+| GET | `/api/database/list` | Lista wszystkich baz danych | `{ databases: DatabaseInfo[], defaultDatabase: string }` |
+| GET | `/api/database/:db/tables` | Lista tabel w bazie | `{ tables: TableInfo[] }` |
+| GET | `/api/database/:db/tables/:table/schema` | Schemat kolumn tabeli | `TableSchema` (columns, primaryKeys, foreignKeys) |
+| POST | `/api/database/:db/tables/:table/query` | Zapytanie z filtrami i sortowaniem | `QueryResult` (rows, totalCount, page, totalPages) |
+| POST | `/api/database/:db/tables/:table/insert` | Dodanie nowego rekordu | `{ success: true, record: any }` |
+| PUT | `/api/database/:db/tables/:table/update` | Edycja rekordu | `{ success: true, record: any }` |
+| DELETE | `/api/database/:db/tables/:table/delete` | Usunięcie rekordów | `{ success: true, deletedCount: number }` |
+
+**CRUD Operations Flow:**
+
+```
+INSERT:
+User → "➕ Insert New Record" → RecordModal (form)
+  → User fills data → Submit
+  → POST /api/database/:db/tables/:table/insert
+  → insertRecord(db, table, schema, data)
+  → INSERT INTO table (col1, col2) VALUES ($1, $2) RETURNING *
+  → Success → loadTableData() (reload)
+
+UPDATE:
+User → 📝 Edit button → RecordModal (pre-filled)
+  → User edits data → Submit
+  → PUT /api/database/:db/tables/:table/update
+  → updateRecord(db, table, schema, {column: pk, value: id}, data)
+  → UPDATE table SET col1=$1 WHERE pk=$2 RETURNING *
+  → Success → loadTableData() (reload)
+
+DELETE:
+User → Checkboxes → "🗑️ Delete Selected" → DeleteModal (confirmation)
+  → User confirms → DELETE request
+  → deleteRecords(db, table, schema, {column: pk, values: [id1, id2...]})
+  → DELETE FROM table WHERE pk IN ($1, $2, $3...)
+  → Success alert → loadTableData() (reload)
+
+BULK UPDATE (Database → Import integration):
+User → Checkboxes (multiple matches) → "🔄 Update Selected" → handleUpdateSelected()
+  → Extract: min/max dates, unique (league, country) pairs
+  → Build URL: /import?dateFrom=X&dateTo=Y&leagues=L1|K1,L2|K2
+  → window.open(url, '_blank') → ImportPage with pre-filled form
+```
+
+**Następny krok:** Implementacja pozostałych zakładek (Wyszukiwarka Typów, Analityka)
+
+---
+
+## 11.1. INTEGRACJA DATABASE → IMPORT (Bulk Update)
+
+**Data:** 14 lutego 2026
+
+### Cel funkcjonalności
+
+Umożliwienie użytkownikowi szybkiego utworzenia zadania aktualizacji wyników dla wielu meczów bezpośrednio z zakładki Baza Danych, bez ręcznego konfigurowania parametrów.
+
+### User Story
+
+> "Przeglądając tabelę `matches` w Database, użytkownik zaznacza kilka meczów z różnych dat i lig, klika przycisk 'Zaktualizuj wybrane' → automatycznie otwiera się nowa karta z zakładką Import i gotowym do utworzenia zadaniem typu 'Aktualizacja wyników' z odpowiednimi parametrami (zakres dat + ligi)."
+
+### Implementacja - ImportPage (Primary Agent)
+
+**Plik:** `src/pages/ImportPage.tsx`
+
+#### 1. URL Parameters Support
+
+ImportPage obsługuje dwa scenariusze otwierania z parametrami URL:
+
+**Scenariusz A: Single match (istniejący)**
+```
+/import?date=2026-02-14&league=Premier%20League&country=England
+```
+- Używany przez kliknięcie w komórkę `is_finished='no'` w DatabasePage
+- Otwiera modal z jedną ligą i jedną datą
+
+**Scenariusz B: Multiple matches (NOWY - 14.02.2026)**
+```
+/import?dateFrom=2026-02-14&dateTo=2026-02-20&leagues=Premier%20League|England,La%20Liga|Spain
+```
+- Używany przez przycisk "Zaktualizuj wybrane" w DatabasePage
+- Otwiera modal z wieloma ligami i zakresem dat
+
+**Format parametru `leagues`:**
+- Format: `Liga1|Kraj1,Liga2|Kraj2,Liga3|Kraj3`
+- Separator lig: przecinek `,`
+- Separator liga-kraj: pipe `|`
+- URL encoding: automatyczne przez `URLSearchParams`
+
+#### 2. Nowe funkcje
+
+**`openModalWithMultipleParams(dateFrom, dateTo, leaguesParam)`**
+
+Logika:
+1. Fetch `/api/config` → pobierz listę wszystkich lig
+2. Parse `leaguesParam`: split by `,` → dla każdego split by `|` → find matching league
+3. Ustaw stan formularza:
+   - `jobType = 'update_results'`
+   - `dateFrom = dateFromParam`
+   - `dateTo = dateToParam`
+   - `selectedLeagues = matchingLeagueIds[]`
+4. Otwórz modal: `setShowModal(true)`
+
+**Rozszerzony `useEffect` (URL params handling)**
+
+```typescript
+useEffect(() => {
+  // Sprawdź scenariusz A (multiple)
+  if (dateFrom && dateTo && leagues) {
+    openModalWithMultipleParams(...)
+    return
+  }
+  
+  // Sprawdź scenariusz B (single)
+  if (date && league && country) {
+    openModalWithParams(...)
+  }
+}, [searchParams])
+```
+
+#### 3. Zmiany w kodzie
+
+**Import:**
+```typescript
+import { useSearchParams } from 'react-router-dom'
+```
+
+**Stan:**
+```typescript
+const [searchParams] = useSearchParams()
+```
+
+**Funkcje:** (linie ~135-195)
+- `openModalWithParams()` - istniejąca (single match)
+- `openModalWithMultipleParams()` - nowa (bulk update)
+
+### Implementacja - DatabasePage (Database Agent)
+
+**Data:** 14 lutego 2026  
+**Plik:** `src/pages/DatabasePage.tsx`  
+**Linie:** ~890 (przycisk), ~469 (funkcja handleUpdateSelected)
+
+#### 1. Nowy przycisk "Update Selected"
+
+**Lokalizacja:** Linia 890, w sekcji `.crudActions`, przed przyciskiem "Delete Selected"
+
+**Kod:**
+```tsx
+<button
+  className={styles.btnWarning}
+  onClick={handleUpdateSelected}
+  disabled={loading || selectedRows.size === 0 || selectedTable !== 'matches'}
+  title={selectedTable !== 'matches' 
+    ? 'This feature only works for the matches table' 
+    : `Update results for ${selectedRows.size} selected match(es)`}
+>
+  🔄 Update Selected ({selectedRows.size})
+</button>
+```
+
+**Warunki aktywacji:**
+- `selectedTable === 'matches'` (tylko dla tabeli matches)
+- `selectedRows.size > 0` (przynajmniej 1 mecz zaznaczony)
+- `!loading` (nie podczas ładowania)
+
+**Styl CSS:** `.btnWarning` - pomarańczowy gradient (#f59e0b → #d97706)
+
+#### 2. Funkcja `handleUpdateSelected()`
+
+**Lokalizacja:** Linia 469, tuż po funkcji `handleFinishedCellClick`  
+**Długość:** 93 linie  
+
+**Algorytm:**
+
+```typescript
+const handleUpdateSelected = () => {
+  // 1. Walidacja
+  if (selectedTable !== 'matches' || selectedRows.size === 0) return
+  if (!queryResult || !tableSchema) return
+  
+  // 2. Pobierz primary key column
+  const pkColumn = tableSchema.primaryKeys[0]
+  if (!pkColumn) return
+  
+  // 3. Filtruj pełne obiekty meczów na podstawie selectedRows (Set<PK>)
+  const selectedMatches = queryResult.rows.filter(row => {
+    const pkValue = row[pkColumn]
+    return selectedRows.has(pkValue)
+  })
+  
+  // 4. Wyciągnij daty i znajdź min/max
+  const matchDates = selectedMatches
+    .map(row => row.match_date)
+    .filter(date => date != null)
+    .map(date => new Date(date))
+  
+  const minDate = new Date(Math.min(...matchDates.map(d => d.getTime())))
+  const maxDate = new Date(Math.max(...matchDates.map(d => d.getTime())))
+  const dateFrom = minDate.toISOString().split('T')[0]
+  const dateTo = maxDate.toISOString().split('T')[0]
+  
+  // 5. Zbierz unikalne pary (league, country)
+  const leagueSet = new Map<string, { league: string; country: string }>()
+  
+  for (const match of selectedMatches) {
+    const league = match.league
+    const country = match.country
+    if (!league || !country) continue
+    
+    const key = `${league}|${country}`
+    if (!leagueSet.has(key)) {
+      leagueSet.set(key, { league, country })
+    }
+  }
+  
+  // 6. Zbuduj leagues parameter
+  const leaguesParam = Array.from(leagueSet.values())
+    .map(({ league, country }) => `${league}|${country}`)
+    .join(',')
+  
+  // 7. Utwórz URL i otwórz nową kartę
+  const params = new URLSearchParams({
+    dateFrom,
+    dateTo,
+    leagues: leaguesParam
+  })
+  
+  window.open(`/import?${params.toString()}`, '_blank')
+}
+```
+
+**Kluczowe decyzje techniczne:**
+
+1. **Użycie Map dla unikalnych lig:**
+   - Key: `"${league}|${country}"` (np. "Premier League|England")
+   - Value: `{ league, country }` object
+   - Automatycznie eliminuje duplikaty (żadnego dodatkowego sprawdzania)
+
+2. **Znajdowanie min/max dat:**
+   - `Math.min(...dates.map(d => d.getTime()))` - timestamp comparison
+   - Konwersja do ISO date: `.toISOString().split('T')[0]` → "YYYY-MM-DD"
+
+3. **Filtrowanie rekordów:**
+   - `selectedRows` to `Set<any>` zawierający tylko PK values
+   - `queryResult.rows` to `any[]` zawierający pełne obiekty
+   - Filter: `selectedRows.has(row[pkColumn])`
+
+4. **Alert handling:**
+   - "Selected matches have no valid dates" - gdy brak match_date
+   - "Selected matches have no valid league/country information" - gdy brak league/country
+   - Console errors dla problemów technicznych (no PK, no queryResult)
+
+**Przykładowy URL output:**
+```
+/import?dateFrom=2026-02-14&dateTo=2026-02-20&leagues=Premier%20League%7CEngland%2CLa%20Liga%7CSpain%2CBundesliga%7CGermany
+```
+
+#### 3. Styl CSS (DatabasePage.module.css)
+
+**Lokalizacja:** Linia 557
+
+```css
+.btnWarning {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 2px 4px rgba(245, 158, 11, 0.2);
+}
+
+.btnWarning:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(245, 158, 11, 0.3);
+}
+
+.btnWarning:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+```
+
+**Design rationale:**
+- Pomarańczowy gradient (#f59e0b → #d97706) - amber/warning color
+- Hover effect: podniesienie o 2px + większy cień
+- Disabled: 50% opacity (zgodnie z innymi przyciskami)
+
+---
+
+### Implementacja - DatabasePage (Database Agent)
+
+> ⚠️ **UWAGA:** Część DatabasePage jest implementowana przez Database Browser Agent.  
+> Szczegóły w: `Dokumentacja/Instrukcje - agenci/TASK - Bulk Update Selected Matches.md`
+
+**Kluczowe zmiany (overview):**
+1. Nowy przycisk "🔄 Update Selected" obok "🗑️ Delete Selected"
+2. Funkcja `handleUpdateSelected()` - zbiera dane z zaznaczonych meczów:
+   - Znajduje min/max daty → `dateFrom`, `dateTo`
+   - Zbiera unikalne pary `(league, country)` → buduje `leagues` param
+   - Otwiera: `window.open(/import?dateFrom=X&dateTo=Y&leagues=...)`
+3. Fix timezone: używa `getFullYear()`, `getMonth()`, `getDate()` (local time) zamiast UTC
+
+**Fix problemu timezone:** (14.02.2026)
+
+PostgreSQL zwraca daty jako UTC timestamps (np. `2026-02-13T23:00:00.000Z` dla 14.02.2026).  
+Konwersja przez `new Date()` + local methods poprawnie interpretuje strefę czasową użytkownika:
+
+```typescript
+const dateObj = new Date(date)  // Parse UTC timestamp
+const year = dateObj.getFullYear()  // Returns local year
+const day = dateObj.getDate()       // Returns local day
+```
+
+### User Flow
+
+```
+1. User w zakładce Database
+   ├─> Wybiera bazę: bet_assistant
+   ├─> Wybiera tabelę: matches
+   ├─> Zaznacza 5 meczów (checkboxy):
+   │   - 14.02: Premier League / England
+   │   - 15.02: La Liga / Spain
+   │   - 15.02: Bundesliga / Germany
+   │   - 17.02: Premier League / England
+   │   - 20.02: Serie A / Italy
+   └─> Klika: "🔄 Update Selected (5)"
+
+2. DatabasePage: handleUpdateSelected()
+   ├─> Zbiera pełne obiekty meczów z queryResult.rows
+   ├─> Znajduje daty: [14.02, 15.02, 17.02, 20.02]
+   ├─> dateFrom = 14.02, dateTo = 20.02
+   ├─> Zbiera ligi: Map { "Premier League|England", "La Liga|Spain", ... }
+   ├─> Buduje URL: /import?dateFrom=2026-02-14&dateTo=2026-02-20&leagues=...
+   └─> window.open(url, '_blank')
+
+3. Nowa karta: ImportPage + URL params
+   ├─> useEffect wykrywa: dateFrom + dateTo + leagues
+   ├─> Wywołuje: openModalWithMultipleParams()
+   │   ├─> Fetch /api/config (lista wszystkich lig)
+   │   ├─> Parse leagues: "Premier League|England,La Liga|Spain,..."
+   │   ├─> Find matching league IDs: [1, 5, 8, 12, 23]
+   │   └─> Ustaw stan formularza
+   └─> Modal "Utwórz zadanie" otwarty z:
+       - Typ: "Aktualizacja wyników"
+       - Data od: 2026-02-14
+       - Data do: 2026-02-20
+       - Ligi: ✅ Premier League, ✅ La Liga, ✅ Bundesliga, ✅ Serie A
+
+4. User klika "Utwórz" → Zadanie w kolejce
+```
+
+### Korzyści
+
+- **UX:** Zamiast ręcznego wybierania 4 lig i wpisywania zakresu 7 dni, wszystko automatyczne
+- **Szybkość:** 1 kliknięcie zamiast 15+ kliknięć w formularzu
+- **Bezpieczeństwo:** Tylko mecze już w bazie (nie można pomylić dat/lig)
+- **Skalowalność:** Działa dla 1 meczu, 10 meczów, 100 meczów
+
+### Testy
+
+- ✅ Zaznaczenie 1 meczu → otwiera modal z 1 ligą i 1 datą
+- ✅ Zaznaczenie 5 meczów (różne daty) → zakres dat poprawny
+- ✅ Zaznaczenie meczów z 3 lig → wszystkie 3 ligi zaznaczone w modalu
+- ✅ Fix timezone: mecze z 14.02 i 15.02 → dateFrom=14.02, dateTo=15.02 (nie 13.02-14.02)
+- ✅ URL encoding: spacje w nazwach lig poprawnie zakodowane
+- ✅ Ligi duplikaty: mecze z tej samej ligi nie duplikują się w URL
+
 ---
 
 ## 12. NOTATKI TECHNICZNE
@@ -1223,5 +1925,5 @@ style: formatowanie
 
 ---
 
-**Ostatnia aktualizacja:** 30 grudnia 2025  
-**Autor dokumentacji:** AI Agent (Migracja)
+**Ostatnia aktualizacja:** 14 lutego 2026  
+**Autor dokumentacji:** AI Agent (Migracja + Database Browser Implementation)

@@ -323,13 +323,20 @@ private async processJob(job: ImportJob): Promise<void> {
 					`📊 Progress: ${cumulativeImported} total imported, ${rateLimitInfo.remaining} API requests remaining`
 				)
 
-				// Get matches imported in THIS iteration (not cumulative)
-				const leagueImported = tempImporter.getProgress().leagues[league.id]?.imported || 0
-				const leagueFailed = tempImporter.getProgress().leagues[league.id]?.failed || 0
+			// Get matches processed in THIS iteration (not cumulative)
+			const leagueImported = tempImporter.getProgress().leagues[league.id]?.imported || 0
+			const leagueFailed = tempImporter.getProgress().leagues[league.id]?.failed || 0
+			const leagueSkipped = tempImporter.getProgress().leagues[league.id]?.skipped || 0
+			const leagueTotal = leagueImported + leagueFailed + leagueSkipped
 
-				// If league didn't import anything and has no failures, it's complete (all matches already in DB)
-				if (leagueImported === 0 && leagueFailed === 0) {
-					this.log(job.id, `✅ League ${league.name} already fully imported (0/0 new matches)`)
+			this.log(job.id, `  League stats: ${leagueImported} imported, ${leagueFailed} failed, ${leagueSkipped} skipped`)
+
+			// Only mark league as completed if we processed ALL matches successfully
+			// Don't mark as completed if there were only skipped matches - this could mean
+			// the league was interrupted mid-processing and some matches weren't reached
+			if (leagueImported === 0 && leagueFailed === 0 && leagueSkipped > 0) {
+				// All matches were skipped - this is OK, league is complete
+				this.log(job.id, `✅ League ${league.name} already fully imported (${leagueSkipped} matches already in DB)`)
 					completedLeagues.push(league.id)
 
 					// Update progress even if no new matches
@@ -388,9 +395,49 @@ private async processJob(job: ImportJob): Promise<void> {
 				} catch (error: any) {
 				this.log(job.id, `❌ Error processing league ${league.name}: ${error.message}`)
 
-				// Cleanup all temp files on error
-				const originalConfigPath = path.join(process.cwd(), 'league-config.json')
+			// Check if this is a rate limit error
+			if (error.message?.includes('Rate limit exceeded') || error.message?.includes('rate limit')) {
+				this.log(job.id, '⏸️  Rate limit reached, pausing job for 15 minutes')
+				this.log(job.id, `⚠️  League ${league.name} will be retried after rate limit reset`)
+
+				// Cleanup all temp files before exiting
 				const backupConfigPath = path.join(process.cwd(), 'logs', `backup-config-${job.id}.json`)
+
+				// Only restore backup if it exists
+				if (fs.existsSync(backupConfigPath)) {
+					try {
+						fs.copyFileSync(backupConfigPath, mainConfigPath)
+						fs.unlinkSync(backupConfigPath)
+					} catch (restoreError: any) {
+						this.log(job.id, `⚠️  Warning: Could not restore config backup: ${restoreError.message}`)
+					}
+				}
+				
+				// Remove temp config if it exists
+				if (fs.existsSync(tempConfigPath)) {
+					try {
+						fs.unlinkSync(tempConfigPath)
+					} catch (cleanupError: any) {
+						this.log(job.id, `⚠️  Warning: Could not remove temp config: ${cleanupError.message}`)
+					}
+				}
+
+				// Update job status to rate_limited and exit
+				await this.updateJobStatus(job.id, 'rate_limited', {
+					...job,
+					imported_matches: cumulativeImported,
+					failed_matches: cumulativeFailed,
+					rate_limit_reset_at: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
+					progress: {
+						...job.progress,
+						completed_leagues: completedLeagues,
+						current_league: league.id, // Keep current league so it will be retried
+					},
+				} as any)
+				return // Exit immediately, don't continue with other leagues
+			}
+
+			// For other errors, cleanup and continue with next league
 
 				// Only restore backup if it exists
 				if (fs.existsSync(backupConfigPath)) {

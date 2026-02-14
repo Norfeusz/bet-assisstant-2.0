@@ -1,0 +1,31 @@
+1. UI 1 z filtrami do wyboru:
+Drużyna gospodarzy (kiedy dana drużyna jest gospodarzem)
+Drużyna gości (kiedy dana drużyna jest gościem)
+Drużyna ogólnie (kiedy dana drużyna jest gospodarzem lub gościem)
+Zakład
+Typ
+Szanse co 5%, np 60-64%, 65%-69%
+Szanse co 10%, np 60-69%, 70%-79%
+Kurs co 0,05 np 1,40-1,44; 1,45-1,49; itd
+Kurs co 0,1 np 1,40-1,49; 1,50-1,59; itd
+Róznica miejsc |#1-#2| co 2 czyli 1, 2/3, 4/5 itd
+Średnia miejsc (#1+#2)/2 co 2 czyli 1,5-2,5; 3,5-4,5
+Kraj
+Liga
+Szanse drużyna co 5%, np 60-64%, 65%-69%
+Szanse drużyna co 10%, np 60-69%, 70%-79%
+
+2. Dane bierzemy z dwóch arkuszów (do wyboru) Typy i Kupony
+
+3. Filtry ograniczają wyniki 
+
+4. Szukamy wierszów które w kolumnie Wszedł (U) mają tak
+
+5. Wynik % meczów spełniających kryteria z filtrów tak/(tak+nie)*100% + w nawiasie liczba meczów tak / (liczba meczów tak + liczba meczów nie) np "60% (6/10)"
+
+
+6 UI 2 z wyborem meczu z arkusza Bet Bulider - lista do wyboru (Drużyna gospodarzy cs Drużyna gości)
+
+7. po wybraniu meczu automatcznie uzupełniane są filtry według danych z bet buildera (przeciwieństwo do 1 UI, w tym wypadku użytkownik odznacza filtry zamiast je dodawać)
+
+8. UI 3 - Matryca z wszystkimi meczami z bet builder - jako wiersze - mecze - jako kolumny filtry (wszystkkie - szanse wewnątrz matrycy dla każdego filtru osobno) - ostatnia kolumna to kombinacja filtrów (wybieramy jakimi filtrami ograniczamy wyliczanie % dla meczów) - pokazywany jest % dla wszystkich meczów przy uwzględnieniu wybranych filtrów.

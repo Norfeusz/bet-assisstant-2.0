@@ -1,0 +1,341 @@
+================================================================================
+    AUTOMATYCZNE PRZENOSZENIE TYPÓW DO STREFY TYPERA
+    Instrukcje dla agenta w drugim projekcie
+================================================================================
+
+═══════════════════════════════════════════════════════════════════════════
+    1. CO TO JEST I JAK DZIAŁA
+═══════════════════════════════════════════════════════════════════════════
+
+FUNKCJA:
+Automatyczne dodawanie najlepszych typów z wyszukiwania Bet Finder do arkusza
+Google Sheets "Bet Builder" (Strefa Typera).
+
+PRZEPŁYW DZIAŁANIA:
+1. Użytkownik uruchamia wyszukiwanie w Bet Finder (np. "Najwięcej bramek")
+2. System znajduje TOP X wyników (np. TOP 10)
+3. Użytkownik klika przycisk "Auto-Add" w modalu z wynikami
+4. Frontend wysyła każdy mecz do backendu
+5. Backend:
+   - Oblicza statystyki dla meczu (5/10/15 ostatnich meczów)
+   - Oblicza procentową szansę na trafienie zakładu
+   - Sprawdza czy szansa >= 60%
+   - Jeśli TAK → dodaje do Google Sheets
+   - Jeśli NIE → pomija (skip)
+
+ZASADY IMPORTU:
+✓ Tylko typy gdzie obliczona szansa >= 60%
+✓ Minimum 4 wartości statystycznych wymagane (inaczej "za mało danych")
+✓ Najkorzystniejsze kursy (TOP wyniki z wyszukiwania)
+✓ Automatyczne obliczanie statystyk dla 5/10/15 meczów (overall + H/A)
+✓ Duplikaty nie są sprawdzane - każde wywołanie dodaje nowy wiersz
+
+═══════════════════════════════════════════════════════════════════════════
+    2. LOKALIZACJE PLIKÓW W NASZYM PROJEKCIE
+═══════════════════════════════════════════════════════════════════════════
+
+W kopii starego projektu (./stary/) znajdziesz:
+
+FRONTEND - LOGIKA AUTO-ADD:
+📁 stary/public/js/bet-finder.js
+   └─ Linia ~2903: funkcja autoAddResultsToBetBuilder(results, modalType)
+      • Główna funkcja auto-add
+      • Iteruje przez wyniki wyszukiwania
+      • Ładuje konfigurację z modal-types-config.json
+      • Mapuje typ wyszukiwania na typ zakładu (betType + betOption)
+      • Wysyła każdy mecz do backendu (/api/strefa-typera/add-match-bet-builder)
+      • Pokazuje podsumowanie (dodane/pominięte/błędy)
+
+📁 stary/public/js/app.js
+   └─ Linia ~4123: funkcja showAutoAddTypesModal()
+      • Modal z wyborem typów wyszukiwań do auto-add
+      • Checkboxy dla każdego typu (bramki, rożne, etc.)
+      • Przycisk "Dodaj wszystkie" vs "Dodaj wybrane"
+   
+   └─ Linia ~4250: funkcja startAutoAddTypes(mode)
+      • Ustawia flagę window.autoAddToBetBuilder = true
+      • Określa które typy modali mają być auto-dodawane
+      • Uruchamia serie wyszukiwań
+
+   └─ Linia ~2800: integracja auto-add w showModal
+      • Sprawdza czy auto-add jest aktywny
+      • Automatycznie wywołuje autoAddResultsToBetBuilder dla wyników
+
+BACKEND - OBLICZENIA I ZAPIS:
+📁 stary/server/routes/strefa-typera.ts
+   └─ Linia ~450-600: endpoint POST /strefa-typera/add-match-bet-builder
+      • Przyjmuje: homeTeam, awayTeam, league, date, betType, betOption
+      • Znajduje mecz w bazie danych
+      • Wywołuje calculateBetStatistics() dla 5/10/15 meczów
+      • Oblicza średnią szansę (kolumna E w arkuszu):
+        - Bierze wartości z kolumn H-O (8 wartości)
+        - Filtruje tylko numeryczne (ignoruje "za mało danych")
+        - Jeśli < 4 wartości → "za mało danych"
+        - Jeśli >= 4 wartości → średnia arytmetyczna
+      • Sprawdza warunek: szansa >= 60%
+      • Jeśli spełniony → appenduje wiersz do Google Sheets
+      • Jeśli nie → zwraca {skipped: true, skipReason: "..."}
+
+   └─ Linia ~567: walidacja progu 60%
+      if (percentValue < 60) {
+          shouldAdd = false
+          skipReason = `szansa < 60% (${percentValue}%)`
+      }
+
+KONFIGURACJA TYPÓW:
+📁 stary/public/modal-types-config.json
+   • Mapowanie typów wyszukiwań na zakłady
+   • Każdy typ ma:
+     - type: nazwa typu (np. "Najwięcej bramek (mecz)")
+     - betCondition: warunek wyboru zakładu
+     - betIfTrue/betIfFalse: typ zakładu (np. "1", "2", "Over", "BTS")
+     - typeIfTrue/typeIfFalse: opcja zakładu (np. "2.5", "-1.5")
+     - group: kategoria (Bramki, Rożne, etc.)
+     - uiFunctionName: nazwa funkcji UI
+
+   Przykład:
+   {
+     "type": "Najwięcej bramek (mecz)",
+     "betIfTrue": "Over",
+     "typeIfTrue": "2.5",
+     "betIfFalse": "-",
+     "typeIfFalse": "-"
+   }
+
+UTILITY - OBLICZENIA STATYSTYK:
+📁 stary/server/utils/bet-statistics.ts
+   └─ calculateBetStatistics(homeTeam, awayTeam, betType, betOption, mode, league, limit)
+      • Pobiera ostatnie X meczów dla każdej drużyny
+      • mode: 'overall' (wszystkie mecze) lub 'ha' (home/away)
+      • limit: 5, 10, lub 15
+      • Zwraca: homePercentage, awayPercentage (lub "za mało danych")
+
+═══════════════════════════════════════════════════════════════════════════
+    3. KLUCZOWE ALGORYTMY DO ZROZUMIENIA
+═══════════════════════════════════════════════════════════════════════════
+
+OBLICZANIE SZANSY (kolumna E w arkuszu):
+-----------------------------------------
+// Backend: strefa-typera.ts, linia ~110-140
+
+const percentages = [
+    stats5Overall.homePercentage,   // H
+    stats5Overall.awayPercentage,   // I
+    stats5Ha.homePercentage,        // J
+    stats5Ha.awayPercentage,        // K
+    stats10Overall.homePercentage,  // L
+    stats10Overall.awayPercentage,  // M
+    stats10Ha.homePercentage,       // N
+    stats10Ha.awayPercentage,       // O
+]
+
+// Tylko numeryczne wartości
+const validPercentages = percentages.filter(p => typeof p === 'number')
+
+if (validPercentages.length < 4) {
+    szanse = 'za mało danych'
+} else {
+    const average = sum(validPercentages) / validPercentages.length
+    szanse = average.toFixed(1).replace('.', ',') + '%'
+}
+
+WALIDACJA PRZED DODANIEM:
+-----------------------------------------
+// Backend: strefa-typera.ts, linia ~556-570
+
+if (szanse === 'za mało danych') {
+    shouldAdd = false
+    skipReason = 'za mało danych'
+} else {
+    const percentValue = parseFloat(szanse.replace(',', '.').replace('%', ''))
+    if (percentValue < 60) {
+        shouldAdd = false
+        skipReason = `szansa < 60% (${percentValue}%)`
+    }
+}
+
+if (shouldAdd) {
+    // Dodaj do Google Sheets
+} else {
+    // Zwróć {skipped: true, skipReason}
+}
+
+MAPOWANIE TYPU WYSZUKIWANIA NA ZAKŁAD:
+-----------------------------------------
+// Frontend: bet-finder.js, linia ~2910-2950
+
+// 1. Załaduj config
+const config = await loadModalTypesConfig()
+
+// 2. Zmapuj modalType na nazwę w JSON
+const searchTypeMap = {
+    'most-goals': 'Najwięcej bramek (mecz)',
+    'most-bts': 'Najwięcej BTS',
+    'home-wins': 'Zwycięstwa gospodarzy',
+    // ... etc
+}
+const typeName = searchTypeMap[modalType]
+
+// 3. Znajdź wszystkie konfiguracje dla tego typu
+const modalConfigs = config.modalTypes.filter(c => c.type === typeName)
+
+// 4. Dla każdej konfiguracji określ betType i betOption
+for (const modalConfig of modalConfigs) {
+    const conditionResult = evaluateCondition(modalConfig.betCondition, result)
+    
+    if (conditionResult) {
+        betType = modalConfig.betIfTrue
+        betOption = modalConfig.typeIfTrue
+    } else {
+        betType = modalConfig.betIfFalse
+        betOption = modalConfig.typeIfFalse
+    }
+    
+    // Wyślij do backendu
+    fetch('/api/strefa-typera/add-match-bet-builder', {
+        body: JSON.stringify({
+            homeTeam, awayTeam, league, date,
+            betType, betOption, odds: ''
+        })
+    })
+}
+
+═══════════════════════════════════════════════════════════════════════════
+    4. STRUKTURA DANYCH - CO JEST PRZENOSZONE
+═══════════════════════════════════════════════════════════════════════════
+
+REQUEST DO BACKENDU:
+{
+  homeTeam: "Manchester United",
+  awayTeam: "Liverpool",
+  league: "Premier League",
+  date: "2025-01-15",
+  betType: "Over",           // np. "1", "2", "Over", "BTS", "Handi 1"
+  betOption: "2.5",           // np. "-", "2.5", "-1.5", "Tak"
+  odds: "",                   // Pusty dla auto-add (obliczone później)
+  superbetLink: "https://...",
+  flashscoreLink: "https://..."
+}
+
+RESPONSE Z BACKENDU (sukces):
+{
+  success: true,
+  message: "Added 1 row to Bet Builder",
+  rowsAdded: 1,
+  homeTeam: "Manchester United",
+  awayTeam: "Liverpool",
+  betType: "Over",
+  betOption: "2.5",
+  odds: "",
+  szanse: "65,5%",           // Lub "za mało danych"
+  matchId: 12345
+}
+
+RESPONSE Z BACKENDU (pominięty):
+{
+  success: false,
+  skipped: true,
+  skipReason: "szansa < 60% (45.2%)"  // Lub "za mało danych"
+}
+
+WIERSZ W GOOGLE SHEETS (kolumny A-AR):
+A: home_team
+B: away_team
+C: betType (zakład)
+D: betOption (typ)
+E: szanse (obliczona średnia %)
+F: odds (kurs - pusty dla auto-add)
+G: moc bet (=E*F, obliczane w arkuszu)
+H-O: statystyki 5/10 meczów (8 kolumn)
+P-S: statystyki 15 meczów (4 kolumny)
+T-W: wyniki (ręczne wypełnienie później)
+X-Y: standing home/away
+Z: komentarz
+AA-AB: kraj, liga
+AC: data meczu
+AD: ID meczu
+AE: ID kuponu
+AF-AG: linki (Superbet, Flashscore)
+AH-AI: rezerwowe
+AJ-AQ: Team Chance statistics (8 kolumn)
+AR: Szansa drużyna
+
+═══════════════════════════════════════════════════════════════════════════
+    5. PRZYKŁADOWY FLOW KROK PO KROKU
+═══════════════════════════════════════════════════════════════════════════
+
+1. Użytkownik klika "Najwięcej bramek" w Bet Finder
+   → queueMostGoals() → findMatches() → showMostGoalsModal(results)
+
+2. Modal pokazuje TOP 10 wyników
+   → Przycisk "🔄 Auto-Add" dostępny w nagłówku
+
+3. Użytkownik klika "Auto-Add"
+   → autoAddResultsToBetBuilder(results, 'most-goals')
+
+4. Funkcja iteruje przez 10 wyników:
+   For each match:
+     a) Ładuje modal-types-config.json
+     b) Mapuje 'most-goals' → "Najwięcej bramek (mecz)"
+     c) Znajduje config: {betIfTrue: "Over", typeIfTrue: "2.5"}
+     d) POST /api/strefa-typera/add-match-bet-builder
+        {homeTeam, awayTeam, betType: "Over", betOption: "2.5"}
+
+5. Backend dla każdego meczu:
+   a) Znajduje mecz w bazie: findFirst({home_team, away_team, match_date})
+   b) Oblicza statystyki:
+      - stats5Overall, stats5Ha
+      - stats10Overall, stats10Ha
+      - stats15Overall, stats15Ha
+   c) Oblicza szansę: średnia z 8 wartości (H-O)
+   d) Sprawdza: szanse >= 60% i min 4 wartości?
+   e) Jeśli TAK → append do Google Sheets
+      Jeśli NIE → skip i zwróć powód
+
+6. Frontend pokazuje toast:
+   "✅ Automatycznie dodano 7 zakładów"
+   "⚠️ Pominięto 3 zakłady (szansa < 60%)"
+
+═══════════════════════════════════════════════════════════════════════════
+    6. CO NALEŻY ZMIGROWAĆ DO NOWEGO PROJEKTU
+═══════════════════════════════════════════════════════════════════════════
+
+FRONTEND (React):
+□ Przycisk "Auto-Add" w modalu wyników
+□ Funkcja autoAddResultsToBetBuilder() → hook useAutoAddBets()
+□ Modal wyboru typów do auto-add (opcjonalne na początek)
+□ Toast notifications dla progress i wyników
+□ Loading state podczas dodawania
+
+BACKEND:
+□ Endpoint już istnieje - nie trzeba zmieniać
+□ Upewnij się że /api/strefa-typera/add-match-bet-builder działa
+
+KONFIGURACJA:
+□ Skopiuj modal-types-config.json do nowego projektu
+□ Utwórz TypeScript types dla konfiguracji
+
+PROPOZYCJA STRUKTURY:
+src/hooks/useAutoAddBets.ts          - logika auto-add
+src/api/strefaTypera.ts              - API calls
+src/types/betTypes.ts                - TypeScript interfaces
+src/config/modalTypes.ts             - export config (z JSON)
+src/components/AutoAddButton.tsx     - przycisk w modalu
+
+═══════════════════════════════════════════════════════════════════════════
+    7. NAJWAŻNIEJSZE DO ZAPAMIĘTANIA
+═══════════════════════════════════════════════════════════════════════════
+
+✓ Próg 60% jest TWARDY - niższe szanse są pomijane
+✓ Minimum 4 wartości statystycznych wymagane
+✓ Backend oblicza szansę jako średnią z kolumn H-O (8 wartości)
+✓ Modal-types-config.json jest KLUCZOWY - mapuje wyszukiwania na zakłady
+✓ Jeden typ wyszukiwania może mieć WIELE konfiguracji zakładów
+✓ Backend automatycznie pomija niepasujące typy (zwraca skip: true)
+✓ Frontend pokazuje podsumowanie: dodane/pominięte/błędy
+✓ Google Sheets jest aktualizowany przez backend (nie frontend)
+
+================================================================================
+    KONIEC INSTRUKCJI
+    Powodzenia w implementacji! ⚽
+================================================================================

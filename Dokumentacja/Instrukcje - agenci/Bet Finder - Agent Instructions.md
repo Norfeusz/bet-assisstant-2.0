@@ -11,6 +11,17 @@
 Projekt: **Bet Assistant 2.0** - Migracja z Vanilla JS do React + TypeScript  
 Twój zakres: **Wyszukiwarka Typów (Bet Finder)** - implementacja logiki biznesowej
 
+### ⚠️ WAŻNA REGUŁA - FOLDER "stary"
+
+**NIGDY NIE ODWOŁUJ SIĘ DO FOLDERU `stary/` W NOWYM KODZIE!**
+
+- Folder `stary/` zawiera tylko starą wersję aplikacji do **referencji**
+- Folder zostanie **usunięty** po zakończeniu migracji
+- Wszystkie pliki które są potrzebne w nowym projekcie **muszą być skopiowane** do właściwych folderów
+- Przykład: `Lista rozgrywek.csv` została skopiowana do `files/Lista rozgrywek.csv`
+- W nowym kodzie używaj: `path.join(process.cwd(), 'files', 'Lista rozgrywek.csv')`
+- **NIE używaj:** `path.join(process.cwd(), 'stary', '...')`
+
 ### Co zostało już zrobione (przez mnie):
 
 ✅ **Struktura UI** (BetFinderPage.tsx - 420 linii)

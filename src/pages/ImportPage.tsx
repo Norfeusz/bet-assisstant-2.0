@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import styles from './ImportPage.module.css'
 
 interface ImportJob {
@@ -24,6 +25,7 @@ interface League {
 }
 
 function ImportPage() {
+  const [searchParams] = useSearchParams()
   const [jobs, setJobs] = useState<ImportJob[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -39,6 +41,29 @@ function ImportPage() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [jobType, setJobType] = useState<'new_matches' | 'update_results'>('new_matches')
+
+  // Handle URL parameters (for opening modal from Database page)
+  useEffect(() => {
+    // Scenario 1: Multiple matches (from "Update Selected" button)
+    const dateFrom = searchParams.get('dateFrom')
+    const dateTo = searchParams.get('dateTo')
+    const leaguesParam = searchParams.get('leagues')
+    
+    if (dateFrom && dateTo && leaguesParam) {
+      // Format: "Premier League|England,La Liga|Spain"
+      openModalWithMultipleParams(dateFrom, dateTo, leaguesParam)
+      return
+    }
+    
+    // Scenario 2: Single match (from clicking "no" in is_finished column)
+    const date = searchParams.get('date')
+    const league = searchParams.get('league')
+    const country = searchParams.get('country')
+    
+    if (date && league && country) {
+      openModalWithParams(date, league, country)
+    }
+  }, [searchParams])
 
   // Load jobs on mount
   useEffect(() => {
@@ -111,6 +136,77 @@ function ImportPage() {
       
       setDateFrom(weekAgo.toISOString().split('T')[0])
       setDateTo(today.toISOString().split('T')[0])
+      setShowModal(true)
+    } catch (error) {
+      console.error('Error loading leagues:', error)
+      alert('Błąd podczas ładowania lig')
+    }
+  }
+
+  const openModalWithParams = async (date: string, leagueName: string, country: string) => {
+    try {
+      // Load leagues
+      const response = await fetch('/api/config')
+      if (!response.ok) throw new Error('Failed to load leagues')
+      const data = await response.json()
+      setLeagues(data.leagues)
+      
+      // Find league by name + country
+      const matchingLeague = data.leagues.find((l: League) => 
+        l.name === leagueName && l.country === country
+      )
+      
+      // Set form values
+      setJobType('update_results')
+      setDateFrom(date)
+      setDateTo(date)
+      
+      if (matchingLeague) {
+        setSelectedLeagues([matchingLeague.id])
+      } else {
+        console.warn(`League not found: ${leagueName} (${country})`)
+      }
+      
+      setShowModal(true)
+    } catch (error) {
+      console.error('Error loading leagues:', error)
+      alert('Błąd podczas ładowania lig')
+    }
+  }
+
+  const openModalWithMultipleParams = async (dateFromParam: string, dateToParam: string, leaguesParam: string) => {
+    try {
+      // Load leagues
+      const response = await fetch('/api/config')
+      if (!response.ok) throw new Error('Failed to load leagues')
+      const data = await response.json()
+      setLeagues(data.leagues)
+      
+      // Parse leagues parameter: "Premier League|England,La Liga|Spain"
+      const leagueEntries = leaguesParam.split(',')
+      const matchingLeagueIds: number[] = []
+      
+      for (const entry of leagueEntries) {
+        const [leagueName, country] = entry.split('|')
+        if (!leagueName || !country) continue
+        
+        const matchingLeague = data.leagues.find((l: League) => 
+          l.name === leagueName && l.country === country
+        )
+        
+        if (matchingLeague) {
+          matchingLeagueIds.push(matchingLeague.id)
+        } else {
+          console.warn(`League not found: ${leagueName} (${country})`)
+        }
+      }
+      
+      // Set form values
+      setJobType('update_results')
+      setDateFrom(dateFromParam)
+      setDateTo(dateToParam)
+      setSelectedLeagues(matchingLeagueIds)
+      
       setShowModal(true)
     } catch (error) {
       console.error('Error loading leagues:', error)

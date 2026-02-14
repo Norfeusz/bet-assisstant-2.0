@@ -282,12 +282,21 @@ export class DataImporter {
 		}
 
 		try {
-			const currentYear = new Date().getFullYear()
+			// Try to fetch fixtures - first with current year, then previous year if no results
+			const fromDateObj = new Date(fromDate)
+			const currentYear = fromDateObj.getFullYear()
 			
 			console.log(`  🔍 Fetching finished fixtures: league=${league.id}, season=${currentYear}, from=${fromDate}, to=${toDate}`)
 
-			// Fetch fixtures from API
-			const fixtures = await this.apiClient.getLeagueFixtures(league.id, currentYear, { from: fromDate, to: toDate })
+			// Try current year season first
+			let fixtures = await this.apiClient.getLeagueFixtures(league.id, currentYear, { from: fromDate, to: toDate })
+
+			// If no fixtures found and month is Jan-Jul, try previous year (for split-year leagues)
+			if (fixtures.length === 0 && fromDateObj.getMonth() < 7) {
+				const previousYear = currentYear - 1
+				console.log(`  📅 No fixtures in season ${currentYear}, trying season ${previousYear}...`)
+				fixtures = await this.apiClient.getLeagueFixtures(league.id, previousYear, { from: fromDate, to: toDate })
+			}
 			
 			console.log(`  ✅ API returned ${fixtures.length} fixtures for ${league.name}`)
 
@@ -428,27 +437,37 @@ export class DataImporter {
 		}
 
 		try {
-			// Get current season (2025 for Nov 2025)
-			const currentYear = new Date().getFullYear()
+// Try to fetch fixtures - for Jan-Jul, fetch from BOTH current and previous season
+		const fromDateObj = new Date(fromDate)
+		const currentYear = fromDateObj.getFullYear()
+		
+		console.log(`  🔍 Fetching fixtures: league=${league.id}, season=${currentYear}, from=${fromDate}, to=${toDate}`)
 
-			console.log(`  🔍 Fetching fixtures: league=${league.id}, season=${currentYear}, from=${fromDate}, to=${toDate}`)
+		// Try current year season first
+		let fixtures = await this.apiClient.getLeagueFixtures(league.id, currentYear, { from: fromDate, to: toDate })
 
-			// Fetch fixtures for this league in date range
-			const fixtures = await this.apiClient.getLeagueFixtures(league.id, currentYear, { from: fromDate, to: toDate })
+		// If no fixtures found and month is Jan-Jul, try previous year (for split-year leagues)
+		if (fixtures.length === 0 && fromDateObj.getMonth() < 7) {
+			const previousYear = currentYear - 1
+			console.log(`  📅 No fixtures in season ${currentYear}, trying season ${previousYear}...`)
+			fixtures = await this.apiClient.getLeagueFixtures(league.id, previousYear, { from: fromDate, to: toDate })
+		}
 
-			console.log(`  ✅ API returned ${fixtures.length} fixtures for ${league.name}`)
-
-			if (fixtures.length === 0) {
-				return
-			}
-
-			// Check data availability for this league (first match as sample)
+		console.log(`  ✅ API returned ${fixtures.length} fixtures for ${league.name}`)
 			await this.checkAndLogLeagueDataAvailability(league, fixtures[0])
 
 			// Process each fixture (no pre-checking for duplicates)
 			// Database will handle duplicates via unique constraint on fixture_id
 			for (const fixture of fixtures) {
 				await this.importSingleMatch(fixture, league)
+				
+				// Check if we're running low on API requests after each match
+				// If we hit the limit, throw error to pause and resume later
+				const rateLimitInfo = this.getRateLimitInfo()
+				if (rateLimitInfo.remaining <= 5) {
+					console.warn(`\n  ⚠️  Rate limit critically low (${rateLimitInfo.remaining} remaining), pausing league import`)
+					throw new Error('Rate limit exceeded - pausing to preserve requests')
+				}
 			}
 			
 			// Log summary for this league
@@ -709,17 +728,35 @@ export class DataImporter {
 		const awayTeam = fixture.teams.away.name
 		const isFinished = ['FT', 'AET', 'PEN'].includes(fixture.fixture.status.short)
 
-		// Check if match already exists in database BEFORE making API calls
+		// Check if match already exists in database
 		const existingMatch = await prisma.matches.findUnique({
 			where: { fixture_id: fixtureId },
-			select: { fixture_id: true }
+			select: { 
+				fixture_id: true,
+				standing_home: true,
+				standing_away: true,
+				home_odds: true,
+				draw_odds: true,
+				away_odds: true
+			}
 		})
 
-		if (existingMatch) {
-			console.log('  Already exists (skipped): ' + homeTeam + ' vs ' + awayTeam)
+		// If match exists and has all key data (standings + odds), skip
+		const hasCompleteData = existingMatch && 
+			existingMatch.standing_home !== null && 
+			existingMatch.standing_away !== null &&
+			existingMatch.home_odds !== null
+		
+		if (hasCompleteData) {
+			console.log('  Already complete (skipped): ' + homeTeam + ' vs ' + awayTeam)
 			this.progress.skippedMatches++
 			this.progress.leagues[league.id].skipped++
 			return
+		}
+
+		// If match exists but is incomplete, we'll update it
+		if (existingMatch && !hasCompleteData) {
+			console.log('  Updating incomplete match: ' + homeTeam + ' vs ' + awayTeam)
 		}
 			
 		// Fetch full data (statistics + odds)
@@ -735,13 +772,15 @@ export class DataImporter {
 			statistics = statsResponse.response
 			hasStatistics = statistics.length > 0
 		} catch (error: any) {
-			// If rate limit exceeded (our internal check OR API 429), rethrow to pause import
+			// If rate limit exceeded, log warning but DON'T throw - save match with partial data
+			// This allows us to continue processing other matches and come back to incomplete ones later
 			if (error.message?.includes('Rate limit exceeded') || error.message?.includes('429')) {
-				console.warn('  Rate limit reached while fetching statistics')
-				throw error
+				console.warn('  ⚠️  Rate limit reached while fetching statistics - saving with partial data')
+				// Continue to save match with whatever data we have
+			} else {
+				// For other errors (API doesn't have stats, network issues, etc.), continue without stats
+				console.warn('    No statistics available for fixture ' + fixtureId)
 			}
-			// For other errors (API doesn't have stats, network issues, etc.), continue without stats
-			console.warn('    No statistics available for fixture ' + fixtureId)
 		}
 
 		// Check if odds are available for this league (cache result)
@@ -766,13 +805,14 @@ export class DataImporter {
 					this.leagueOddsAvailability.set(league.id, true)
 				}
 			} catch (error: any) {
-				// If rate limit exceeded (our internal check OR API 429), rethrow to pause import
+				// If rate limit exceeded, log warning but DON'T throw - save match with partial data
 				if (error.message?.includes('Rate limit exceeded') || error.message?.includes('429')) {
-					console.warn('  Rate limit reached while fetching odds')
-					throw error
+					console.warn('  ⚠️  Rate limit reached while fetching odds - saving with partial data')
+					// Continue to save match with whatever data we have
+				} else {
+					// For other errors (API doesn't have odds, network issues), continue without odds
+					console.warn('    No odds available for fixture ' + fixtureId)
 				}
-				// For other errors (API doesn't have odds, network issues), continue without odds
-				console.warn('    No odds available for fixture ' + fixtureId)
 			}
 		}
 
@@ -851,17 +891,24 @@ export class DataImporter {
 		// Determine if match is finished (FT = Full Time, AET = After Extra Time, PEN = Penalties)
 		const isFinished = ['FT', 'AET', 'PEN'].includes(fixture.fixture.status.short) ? 'yes' : 'no'
 
-		// Get team standings ONLY for matches from November 1, 2025 onwards
+		// Get team standings for all matches
 		let homeStanding: number | null = null
 		let awayStanding: number | null = null
 
-		const standingsCutoffDate = new Date('2025-11-01')
-		if (matchDate >= standingsCutoffDate) {
-			const season = new Date(fixture.fixture.date).getFullYear()
-			const standings = await this.getTeamStandings(league.id, season, homeTeam, awayTeam)
-			homeStanding = standings.homeStanding
-			awayStanding = standings.awayStanding
+		// Try current year first, then previous year (for leagues that span calendar years)
+		const matchYear = new Date(fixture.fixture.date).getFullYear()
+		let standings = await this.getTeamStandings(league.id, matchYear, homeTeam, awayTeam)
+		
+		// If no standings found and match is in Jan-Jul, try previous year
+		if (standings.homeStanding === null && standings.awayStanding === null) {
+			const month = new Date(fixture.fixture.date).getMonth() + 1
+			if (month <= 7) {
+				standings = await this.getTeamStandings(league.id, matchYear - 1, homeTeam, awayTeam)
+			}
 		}
+		
+		homeStanding = standings.homeStanding
+		awayStanding = standings.awayStanding
 
 		// Half-time scores
 		const homeScoreHT = fixture.score.halftime.home ?? 0

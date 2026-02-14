@@ -6,6 +6,41 @@
 
 ## 0. WPROWADZENIE W PROJEKT
 
+### ⚠️ KRYTYCZNA ZASADA - FOLDER "stary"
+
+**ABSOLUTNIE ZAKAZANE: Używanie folderu `stary/` w nowym kodzie!**
+
+❌ **NIGDY NIE ROB TEGO:**
+```typescript
+import something from '../stary/...'
+const filePath = './stary/public/file.csv'
+const path = path.join(process.cwd(), 'stary', '...')
+```
+
+✅ **ZAWSZE ROB TO:**
+```typescript
+// Pliki potrzebne w aplikacji są w głównych folderach
+const filePath = path.join(process.cwd(), 'files', 'Lista rozgrywek.csv')
+import config from '../config/settings.json'
+```
+
+**DLACZEGO:**
+- Folder `stary/` to **TYLKO REFERENCJA** do starej wersji aplikacji
+- Służy **WYŁĄCZNIE do sprawdzania jak działał stary kod**
+- Zostanie **CAŁKOWICIE USUNIĘTY** po zakończeniu migracji
+- Wszystkie potrzebne pliki już zostały skopiowane:
+  - `files/Lista rozgrywek.csv` - linki do Superbet i Flashscore
+  - `config/` - wszystkie konfiguracje
+  - `data/` - dane runtime aplikacji
+
+**JEŚLI POTRZEBUJESZ PLIKU ZE STAREGO KODU:**
+1. Sprawdź czy już nie istnieje w `files/`, `config/`, lub `data/`
+2. Jeśli nie - skopiuj go do odpowiedniej lokalizacji
+3. Zaktualizuj wszystkie ścieżki w kodzie
+4. **NIGDY nie linkuj bezpośrednio do `stary/`**
+
+---
+
 ### 0.1 Czym jest Bet Assistant 2.0?
 
 **Bet Assistant 2.0** to zaawansowany system do analizy meczów piłkarskich i wyszukiwania okazji do typowania. Aplikacja pomaga użytkownikom:

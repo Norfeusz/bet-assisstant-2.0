@@ -39,6 +39,47 @@ src/
 ├── utils/        # Funkcje pomocnicze
 ├── App.tsx       # Główny komponent
 └── main.tsx      # Entry point
+
+server/
+├── routes/       # API endpoints
+├── src/
+│   ├── db/       # Database utilities
+│   ├── services/ # Business logic
+│   └── utils/    # Helper functions
+└── league-config-server.ts  # Main server
+
+files/            # Pliki danych (CSV, JSON)
+config/           # Konfiguracje aplikacji
+data/             # Dane runtime (state, cache)
+prisma/           # Database schema & migrations
+
+⚠️ stary/         # TYLKO REFERENCJA - do usunięcia po migracji
+```
+
+## ⚠️ WAŻNE ZASADY ROZWOJU
+
+### Folder "stary" - DO USUNIĘCIA
+
+**NIGDY nie odwołuj się do folderu `stary/` w nowym kodzie!**
+
+- Folder `stary/` zawiera **tylko starą wersję aplikacji do referencji**
+- Zostanie **całkowicie usunięty** po zakończeniu migracji
+- Wszystkie potrzebne pliki **muszą być skopiowane** do właściwych lokalizacji
+- Przykłady prawidłowych lokalizacji:
+  - `files/Lista rozgrywek.csv` (było: `stary/public/Lista rozgrywek.csv`)
+  - `config/*.json` (konfiguracje)
+  - `data/*.json` (dane aplikacji)
+
+**Przykład - ZAKAZANE:**
+```typescript
+❌ import something from '../stary/...'
+❌ const path = './stary/public/file.csv'
+```
+
+**Przykład - POPRAWNE:**
+```typescript
+✅ const path = path.join(process.cwd(), 'files', 'Lista rozgrywek.csv')
+✅ import config from '../config/settings.json'
 ```
 
 ## 🔧 Technologie

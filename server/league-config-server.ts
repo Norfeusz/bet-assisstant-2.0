@@ -5,6 +5,9 @@
 import express from 'express'
 import * as dotenv from 'dotenv'
 import * as path from 'path'
+import { exec } from 'child_process'
+import { fileURLToPath } from 'url'
+import { dirname } from 'path'
 import { ApiFootballClient } from './src/services/api-football-client.js'
 import { LeagueSelector, LeagueConfig } from './src/services/league-selector.js'
 import { ImportStateManager } from './src/utils/import-state.js'
@@ -15,11 +18,27 @@ import strefaTyperaRouter from './routes/strefa-typera'
 import verifyBetsRouter from './routes/verify-bets'
 import analyticsRouter from './routes/analytics'
 import betFinderRouter from './routes/bet-finder'
+import databaseRouter from './routes/database'
 
 dotenv.config()
 
+// ES module __dirname equivalent
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
+
 const app = express()
 const PORT = process.env.PORT || 3000
+
+// CORS middleware
+app.use((req, res, next) => {
+	res.header('Access-Control-Allow-Origin', '*')
+	res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+	res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+	if (req.method === 'OPTIONS') {
+		return res.sendStatus(200)
+	}
+	next()
+})
 
 app.use(express.json())
 
@@ -37,6 +56,22 @@ app.use('/api', analyticsRouter)
 
 // Bet Finder routes
 app.use('/api', betFinderRouter)
+
+// Database Browser routes
+app.use('/api', databaseRouter)
+
+// Open in VSCode endpoint
+app.post('/api/open-vscode', (req, res) => {
+	const projectPath = path.resolve(__dirname, '..')
+	exec('code .', { cwd: projectPath }, (error) => {
+		if (error) {
+			console.error('Error opening VSCode:', error)
+			return res.status(500).json({ error: error.message })
+		}
+		console.log('✅ VSCode opened successfully')
+		res.json({ success: true })
+	})
+})
 
 // Initialize services
 const apiKey = process.env.API_FOOTBALL_KEY || 'dummy-key'

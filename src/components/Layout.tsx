@@ -16,6 +16,12 @@ function Layout({ children }: LayoutProps) {
     { path: '/strefa-typera', label: '📊 Strefa Typera', id: 'strefa-typera' },
     { path: '/analytics', label: '📈 Analityka', id: 'analytics' },
   ]
+
+  const openInVSCode = () => {
+    fetch('http://localhost:3000/api/open-vscode', {
+      method: 'POST'
+    }).catch(err => console.error('Error opening VSCode:', err))
+  }
   
   return (
     <div className={styles.layout}>
@@ -39,6 +45,14 @@ function Layout({ children }: LayoutProps) {
               {tab.label}
             </Link>
           ))}
+          
+          <button 
+            onClick={openInVSCode}
+            className={styles.vscButton}
+            title="Otwórz w Visual Studio Code"
+          >
+            <img src="/files/vsc.ico" alt="VSCode" className={styles.vscIcon} />
+          </button>
         </div>
       </nav>
       
