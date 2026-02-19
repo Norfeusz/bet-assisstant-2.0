@@ -402,7 +402,14 @@ export class DatabaseBrowserService {
 	): Promise<any> {
 		try {
 			const columns = Object.keys(data)
-			const values = Object.values(data)
+			const values = Object.values(data).map(value => {
+				// node-postgres automatically handles JSON/JSONB when receiving objects
+				// but we need to ensure Date objects and other types are handled correctly
+				if (value === undefined) {
+					return null
+				}
+				return value
+			})
 			
 			const setClause = columns
 				.map((col, i) => `"${col}" = $${i + 1}`)
@@ -418,6 +425,11 @@ export class DatabaseBrowserService {
 			`
 
 			console.log(`✏️ Update ${schemaName}.${tableName} where ${primaryKey.column} = ${primaryKey.value}`)
+			console.log('Data to update:', JSON.stringify(data, null, 2))
+			console.log('Columns:', columns)
+			console.log('Values (with types):', values.map((v, i) => `[${i}] ${columns[i]}: ${v === null ? 'null' : typeof v} = ${JSON.stringify(v)}`))
+			console.log('Generated query:', query)
+			console.log('Query parameters:', [...values, primaryKey.value])
 
 			const result = await this.executeQuery(databaseName, query, [...values, primaryKey.value])
 			return result[0]

@@ -1,0 +1,336 @@
+{
+  "name": "Bet Assistant - Monitoring i Alerty Systemu",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/15 * * * *"
+            }
+          ]
+        }
+      },
+      "name": "Cron: Co 15 minut",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "id": "cron-every-15min",
+      "notes": "Regularny health check systemu"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "apiKey",
+              "value": "={{ $env.BET_ASSISTANT_WEBHOOK_KEY }}"
+            }
+          ]
+        }
+      },
+      "name": "Ustaw API key",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        460,
+        300
+      ],
+      "id": "set-api-key"
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.BET_ASSISTANT_API_URL }}/api/webhooks/n8n/health",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-n8n-api-key",
+              "value": "={{ $json.apiKey }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "name": "HTTP - Health Check",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        680,
+        300
+      ],
+      "id": "http-health-check",
+      "notes": "Sprawdza czy API działa"
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.BET_ASSISTANT_API_URL }}/api/webhooks/n8n/status",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-n8n-api-key",
+              "value": "={{ $json.apiKey }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "name": "HTTP - Get System Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        680,
+        100
+      ],
+      "id": "http-system-status",
+      "notes": "Pobiera statystyki systemu"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $node['HTTP - Health Check'].json.success }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "Czy system działa?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ],
+      "id": "check-system-health"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $node['HTTP - Get System Status'].json.stats.totalMatches }}",
+              "operation": "smaller",
+              "value2": 100
+            }
+          ]
+        }
+      },
+      "name": "Czy niska liczba meczów?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        100
+      ],
+      "id": "check-low-matches",
+      "notes": "Alert jeśli < 100 meczów w bazie (coś poszło nie tak)"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "text": "⚠️ SYSTEM ALERT: Niska liczba meczów!\n\n📊 Statystyki:\n• Mecze w bazie: {{ $node['HTTP - Get System Status'].json.stats.totalMatches }}\n• Włączone ligi: {{ $node['HTTP - Get System Status'].json.stats.enabledLeagues }}\n\n🔍 Możliwe przyczyny:\n- Błąd importu\n- Baza danych została wyczyszczona\n- Problem z API Football\n\n✅ Sprawdź logi i status importów!",
+        "additionalFields": {}
+      },
+      "name": "Slack - Alert: Niska liczba meczów",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1340,
+        100
+      ],
+      "id": "slack-low-matches-alert",
+      "credentials": {
+        "slackApi": {
+          "id": "1",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "text": "🚨 SYSTEM DOWN!\n\nBet Assistant API nie odpowiada!\n\n🕐 Timestamp: {{ $now.toISO() }}\n\n❌ Health check error:\n{{ $json.error || 'No response from server' }}\n\n⚠️ NATYCHMIASTOWE DZIAŁANIE WYMAGANE!",
+        "additionalFields": {}
+      },
+      "name": "Slack - KRYTYCZNY: System Down",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        400
+      ],
+      "id": "slack-system-down",
+      "credentials": {
+        "slackApi": {
+          "id": "1",
+          "name": "Slack account"
+        }
+      },
+      "notes": "Alert krytyczny - system nie działa"
+    },
+    {
+      "parameters": {
+        "operation": "sendEmail",
+        "fromEmail": "={{ $env.SMTP_USER }}",
+        "toEmail": "={{ $env.NOTIFICATION_EMAIL }}",
+        "subject": "🚨 KRYTYCZNY: Bet Assistant System Down!",
+        "emailFormat": "html",
+        "text": "<h1 style=\"color: red;\">🚨 SYSTEM DOWN!</h1>\n\n<p>Bet Assistant API nie odpowiada!</p>\n\n<h3>Szczegóły:</h3>\n<ul>\n<li>Timestamp: <b>{{ $now.toISO() }}</b></li>\n<li>Health check: <b>FAILED</b></li>\n</ul>\n\n<h3>Błąd:</h3>\n<pre>{{ JSON.stringify($json, null, 2) }}</pre>\n\n<p><b>NATYCHMIASTOWE DZIAŁANIE WYMAGANE!</b></p>",
+        "options": {}
+      },
+      "name": "Email - KRYTYCZNY Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        500
+      ],
+      "id": "email-critical-alert",
+      "credentials": {
+        "smtp": {
+          "id": "2",
+          "name": "SMTP account"
+        }
+      },
+      "notes": "Email w przypadku krytycznego błędu"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ {\n  timestamp: $now.toISO(),\n  type: 'health_check',\n  healthy: $node['HTTP - Health Check'].json.success,\n  totalMatches: $node['HTTP - Get System Status'].json.stats?.totalMatches,\n  enabledLeagues: $node['HTTP - Get System Status'].json.stats?.enabledLeagues,\n  recentImports: $node['HTTP - Get System Status'].json.stats?.recentImports?.length\n} }}",
+        "options": {}
+      },
+      "name": "Loguj monitoring",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        200
+      ],
+      "id": "log-monitoring-data",
+      "disabled": true,
+      "notes": "Opcjonalne: zapisz do systemu logowania/metryki"
+    }
+  ],
+  "connections": {
+    "Cron: Co 15 minut": {
+      "main": [
+        [
+          {
+            "node": "Ustaw API key",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ustaw API key": {
+      "main": [
+        [
+          {
+            "node": "HTTP - Health Check",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HTTP - Get System Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP - Health Check": {
+      "main": [
+        [
+          {
+            "node": "Czy system działa?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP - Get System Status": {
+      "main": [
+        [
+          {
+            "node": "Czy niska liczba meczów?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Czy system działa?": {
+      "main": [
+        [
+          {
+            "node": "Loguj monitoring",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack - KRYTYCZNY: System Down",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Email - KRYTYCZNY Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Czy niska liczba meczów?": {
+      "main": [
+        [
+          {
+            "node": "Slack - Alert: Niska liczba meczów",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "Bet Assistant",
+      "id": "1"
+    },
+    {
+      "name": "Monitoring",
+      "id": "6"
+    },
+    {
+      "name": "Critical",
+      "id": "5"
+    }
+  ],
+  "meta": {
+    "instanceId": "bet-assistant-monitoring"
+  }
+}

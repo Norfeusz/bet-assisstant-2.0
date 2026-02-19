@@ -614,6 +614,11 @@ function DatabasePage() {
 
 		const pkValue = editingRow[pkColumn]
 		
+		console.log('=== UPDATE RECORD DEBUG ===')
+		console.log('Data to send:', data)
+		console.log('Data stringify:', JSON.stringify(data, null, 2))
+		console.log('Data types:', Object.entries(data).map(([key, val]) => `${key}: ${val === null ? 'null' : typeof val}`))
+		
 		setCrudLoading(true)
 		try {
 			const response = await fetch(
@@ -985,6 +990,16 @@ function DatabasePage() {
 					{/* CRUD Actions */}
 					<div className={styles.crudActions}>
 						<button
+							className={styles.btnSelect}
+							onClick={handleToggleAllRows}
+							disabled={loading || !queryResult || queryResult.rows.length === 0}
+							title={selectedRows.size === queryResult?.rows.length 
+								? `Deselect all ${queryResult.rows.length} visible row(s)` 
+								: `Select all ${queryResult?.rows.length || 0} visible row(s)`}
+						>
+							{selectedRows.size === queryResult?.rows.length ? '☑️' : '☐'} Select All Visible ({queryResult?.rows.length || 0})
+						</button>
+						<button
 							className={styles.btnInsert}
 							onClick={handleOpenInsertModal}
 							disabled={loading || !tableSchema}
@@ -1248,7 +1263,22 @@ interface RecordModalProps {
 function RecordModal({ mode, tableSchema, initialData, onSave, onCancel, loading }: RecordModalProps) {
 	const [formData, setFormData] = useState<Record<string, any>>(() => {
 		if (mode === 'update' && initialData) {
-			return { ...initialData }
+			const data = { ...initialData }
+			console.log('=== MODAL INIT DEBUG ===')
+			console.log('Initial data:', initialData)
+			
+			// Convert JSON/JSONB objects to strings for textarea editing
+			tableSchema.columns.forEach(col => {
+				const typeLower = col.type.toLowerCase()
+				if ((typeLower.includes('json') || typeLower.includes('jsonb')) && data[col.name] !== null && data[col.name] !== undefined) {
+					console.log(`Column ${col.name} (${col.type}):`, typeof data[col.name], data[col.name])
+					if (typeof data[col.name] === 'object') {
+						data[col.name] = JSON.stringify(data[col.name], null, 2)
+						console.log(`Stringified to:`, data[col.name])
+					}
+				}
+			})
+			return data
 		}
 		// Initialize with defaults for INSERT
 		const defaults: Record<string, any> = {}
@@ -1271,6 +1301,10 @@ function RecordModal({ mode, tableSchema, initialData, onSave, onCancel, loading
 	const handleSubmit = (e: React.FormEvent) => {
 		e.preventDefault()
 		
+		console.log('=== FORM SUBMIT DEBUG ===')
+		console.log('Form data before processing:', formData)
+		console.log('Table schema columns:', tableSchema.columns.map(c => `${c.name} (${c.type})`))
+		
 		// Filter out primary key for UPDATE mode (read-only)
 		const dataToSave = { ...formData }
 		if (mode === 'update') {
@@ -1279,26 +1313,130 @@ function RecordModal({ mode, tableSchema, initialData, onSave, onCancel, loading
 			})
 		}
 		
+		// Process each column based on its type
+		tableSchema.columns.forEach(column => {
+			if (dataToSave[column.name] === undefined) {
+				console.log(`Column ${column.name} is undefined, skipping`)
+				return
+			}
+			
+			const columnTypeLower = column.type.toLowerCase()
+			const value = dataToSave[column.name]
+			
+			// Handle DATE columns - convert ISO string to YYYY-MM-DD
+			if (columnTypeLower === 'date' && typeof value === 'string' && value.includes('T')) {
+				dataToSave[column.name] = value.split('T')[0]
+				console.log(`Converted date column "${column.name}" from ISO to date-only:`, dataToSave[column.name])
+			}
+			
+			// Handle JSON/JSONB columns - parse strings to objects
+			else if (columnTypeLower.includes('json') || columnTypeLower.includes('jsonb')) {
+				console.log(`Processing JSON column "${column.name}":`, typeof value, value)
+				
+				if (typeof value === 'string') {
+					// Handle empty strings for nullable JSON columns
+					if (value.trim() === '' && column.nullable) {
+						dataToSave[column.name] = null
+					} else if (value.trim() !== '') {
+						try {
+							dataToSave[column.name] = JSON.parse(value)
+							console.log(`Parsed "${column.name}" to:`, dataToSave[column.name])
+						} catch (err) {
+							alert(`Invalid JSON in field "${column.name}". Please check the syntax.`)
+							throw err
+						}
+					}
+				}
+				// If it's already an object, leave as is
+			}
+			// Handle non-JSON columns that might be objects
+			else {
+				// If value is an object (but not Date, and not Array, and not null)
+				if (value !== null && typeof value === 'object' && !(value instanceof Date) && !Array.isArray(value)) {
+					console.log(`CHECKING: Non-JSON column "${column.name}" (${column.type}) has object value:`, value)
+					// Empty object or other unexpected object - convert to null for nullable columns
+					if (column.nullable && Object.keys(value).length === 0) {
+						dataToSave[column.name] = null
+						console.log(`✓ Converted empty object to null for "${column.name}"`)
+					} else if (column.nullable) {
+						dataToSave[column.name] = null
+						console.warn(`✓ Converted non-empty object to null for nullable "${column.name}":`, value)
+					} else {
+						console.error(`✗ Cannot convert object to null for non-nullable "${column.name}":`, value)
+					}
+				}
+			}
+		})
+		
+		console.log('=== FINAL DATA TO SAVE ===')
+		console.log('DataToSave:', dataToSave)
+		console.log('Types:', Object.entries(dataToSave).map(([key, val]) => `${key}: ${typeof val} ${val === null ? '(null)' : ''}`))
+		
 		onSave(dataToSave)
 	}
 
 	const getInputType = (column: ColumnInfo): string => {
-		if (column.type.includes('int') || column.type.includes('numeric') || column.type.includes('float') || column.type.includes('double')) {
+		const typeLower = column.type.toLowerCase()
+		if (typeLower.includes('int') || typeLower.includes('numeric') || typeLower.includes('float') || typeLower.includes('double')) {
 			return 'number'
 		}
-		if (column.type.includes('date') && !column.type.includes('timestamp')) {
+		if (typeLower.includes('date') && !typeLower.includes('timestamp')) {
 			return 'date'
 		}
-		if (column.type.includes('timestamp') || column.type.includes('time')) {
+		if (typeLower.includes('timestamp') || typeLower.includes('time')) {
 			return 'datetime-local'
 		}
-		if (column.type.includes('bool')) {
+		if (typeLower.includes('bool')) {
 			return 'checkbox'
 		}
-		if (column.type.includes('json')) {
+		if (typeLower.includes('json')) {
 			return 'textarea'
 		}
 		return 'text'
+	}
+
+	const formatValueForInput = (value: any, inputType: string): string => {
+		if (value == null) return ''
+		
+		// For date inputs, extract YYYY-MM-DD from ISO string or Date object
+		if (inputType === 'date') {
+			if (typeof value === 'string') {
+				// ISO format: "2026-02-14T12:30:00.000Z" -> "2026-02-14"
+				return value.split('T')[0]
+			}
+			if (value instanceof Date) {
+				return value.toISOString().split('T')[0]
+			}
+		}
+		
+		// For datetime-local inputs, format as YYYY-MM-DDTHH:mm
+		if (inputType === 'datetime-local') {
+			if (typeof value === 'string') {
+				// ISO: "2026-02-14T12:30:00.000Z" -> "2026-02-14T12:30"
+				const date = new Date(value)
+				if (!isNaN(date.getTime())) {
+					const year = date.getFullYear()
+					const month = String(date.getMonth() + 1).padStart(2, '0')
+					const day = String(date.getDate()).padStart(2, '0')
+					const hours = String(date.getHours()).padStart(2, '0')
+					const minutes = String(date.getMinutes()).padStart(2, '0')
+					return `${year}-${month}-${day}T${hours}:${minutes}`
+				}
+			}
+			if (value instanceof Date) {
+				const year = value.getFullYear()
+				const month = String(value.getMonth() + 1).padStart(2, '0')
+				const day = String(value.getDate()).padStart(2, '0')
+				const hours = String(value.getHours()).padStart(2, '0')
+				const minutes = String(value.getMinutes()).padStart(2, '0')
+				return `${year}-${month}-${day}T${hours}:${minutes}`
+			}
+		}
+		
+		// For JSON textarea - value should already be a string in formData
+		// (converted during initialization or by onChange)
+		
+		return String(value)
 	}
 
 	return (
@@ -1307,12 +1445,13 @@ function RecordModal({ mode, tableSchema, initialData, onSave, onCancel, loading
 				<div className={styles.modalHeader}>
 					<h3>{mode === 'insert' ? '➕ Insert New Record' : '✏️ Update Record'}</h3>
 				</div>
-				<form onSubmit={handleSubmit}>
+				<form className={styles.modalForm} onSubmit={handleSubmit}>
 					<div className={styles.modalBody}>
 						{tableSchema.columns.map(column => {
 							const inputType = getInputType(column)
 							const isReadOnly = mode === 'update' && column.isPrimaryKey
-							const value = formData[column.name] ?? ''
+							const rawValue = formData[column.name] ?? ''
+							const value = formatValueForInput(rawValue, inputType)
 
 							return (
 								<div key={column.name} className={styles.formField}>
@@ -1331,7 +1470,7 @@ function RecordModal({ mode, tableSchema, initialData, onSave, onCancel, loading
 										/>
 									) : inputType === 'textarea' ? (
 										<textarea
-											value={typeof value === 'object' ? JSON.stringify(value, null, 2) : value}
+											value={value}
 											onChange={(e) => handleChange(column.name, e.target.value)}
 											disabled={loading || isReadOnly}
 											required={!column.nullable && !isReadOnly}

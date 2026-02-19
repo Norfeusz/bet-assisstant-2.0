@@ -531,6 +531,29 @@
 	padding: 12px 0;
 }
 
+.btnSelect {
+	background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+	color: white;
+	border: none;
+	padding: 10px 20px;
+	border-radius: 8px;
+	font-size: 14px;
+	font-weight: 600;
+	cursor: pointer;
+	transition: all 0.2s;
+	box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2);
+}
+
+.btnSelect:hover:not(:disabled) {
+	transform: translateY(-2px);
+	box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
+}
+
+.btnSelect:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
 .btnInsert {
 	background: linear-gradient(135deg, #10b981 0%, #059669 100%);
 	color: white;
@@ -727,6 +750,14 @@
 	}
 }
 
+.modalForm {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-height: 0;
+	overflow: hidden;
+}
+
 .modalHeader {
 	padding: 20px 24px;
 	border-bottom: 2px solid #e5e7eb;
@@ -744,6 +775,7 @@
 	padding: 24px;
 	overflow-y: auto;
 	flex: 1;
+	min-height: 0;
 }
 
 .modalFooter {

@@ -1,0 +1,300 @@
+{
+  "name": "Bet Assistant - Codzienny Backup Bazy Danych",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 0 * * *"
+            }
+          ]
+        }
+      },
+      "name": "Cron: Codziennie o 0:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "id": "cron-daily-midnight",
+      "notes": "Backup o północy"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "apiKey",
+              "value": "={{ $env.BET_ASSISTANT_WEBHOOK_KEY }}"
+            }
+          ],
+          "boolean": [
+            {
+              "name": "skipIfNoChanges",
+              "value": true
+            },
+            {
+              "name": "pushToGit",
+              "value": false
+            }
+          ]
+        }
+      },
+      "name": "Ustaw parametry backupu",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        460,
+        300
+      ],
+      "id": "set-backup-params",
+      "notes": "pushToGit=false bo n8n sam zajmie się Git"
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.BET_ASSISTANT_API_URL }}/api/webhooks/n8n/backup-database",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-n8n-api-key",
+              "value": "={{ $json.apiKey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "skipIfNoChanges",
+              "value": "={{ $json.skipIfNoChanges }}"
+            },
+            {
+              "name": "pushToGit",
+              "value": "={{ $json.pushToGit }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "name": "HTTP Request - Create Backup",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        680,
+        300
+      ],
+      "id": "http-create-backup",
+      "notes": "Timeout 2 minuty"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.success }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "Sprawdź czy sukces",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ],
+      "id": "check-success"
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "file",
+        "operation": "upload",
+        "binaryData": false,
+        "folderId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "={{ $env.GOOGLE_DRIVE_BACKUP_FOLDER_ID }}"
+        },
+        "name": "={{ 'bet-assistant-backup-' + $now.toFormat('yyyy-MM-dd-HHmm') + '.sql' }}",
+        "dataPropertyName": "filePath",
+        "options": {}
+      },
+      "name": "Google Drive - Upload Backup",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1120,
+        200
+      ],
+      "id": "gdrive-upload",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "3",
+          "name": "Google Drive account"
+        }
+      },
+      "disabled": true,
+      "notes": "Opcjonalne: Upload backupu do Google Drive"
+    },
+    {
+      "parameters": {
+        "command": "cd {{ $env.BET_ASSISTANT_PROJECT_PATH }}/backups && git add . && git commit -m \"Automated backup: {{ $now.toFormat('yyyy-MM-dd HH:mm') }}\" && git push",
+        "additionalFields": {}
+      },
+      "name": "Execute Command - Git Push",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        100
+      ],
+      "id": "git-push-backup",
+      "notes": "Commituje i pushuje backup do repozytorium Git"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "text": "💾 Backup bazy zakończony!\n\n📊 Szczegóły:\n• Plik: {{ $json.backup.file }}\n• Rozmiar: {{ $json.backup.sizeMB }} MB\n• Timestamp: {{ $json.backup.timestamp }}\n• Total backups: {{ $json.totalBackups }}/10\n\n⏱️ Czas: {{ $json.timing.durationSeconds }}s",
+        "additionalFields": {}
+      },
+      "name": "Slack - Sukces",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1340,
+        100
+      ],
+      "id": "slack-success",
+      "credentials": {
+        "slackApi": {
+          "id": "1",
+          "name": "Slack account"
+        }
+      },
+      "disabled": true,
+      "notes": "Opcjonalne powiadomienie"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "text": "❌ BŁĄD BACKUPU BAZY DANYCH!\n\n{{ $json.error }}\n\n⚠️ Sprawdź co się stało - backup jest krytyczny!",
+        "additionalFields": {}
+      },
+      "name": "Slack - BŁĄD (WAŻNE!)",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        400
+      ],
+      "id": "slack-error",
+      "credentials": {
+        "slackApi": {
+          "id": "1",
+          "name": "Slack account"
+        }
+      },
+      "notes": "KRYTYCZNE: włącz to!"
+    }
+  ],
+  "connections": {
+    "Cron: Codziennie o 3:00": {
+      "main": [
+        [
+          {
+            "node": "Ustaw parametry backupu",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ustaw parametry backupu": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - Create Backup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - Create Backup": {
+      "main": [
+        [
+          {
+            "node": "Sprawdź czy sukces",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sprawdź czy sukces": {
+      "main": [
+        [
+          {
+            "node": "Execute Command - Git Push",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Google Drive - Upload Backup",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack - BŁĄD (WAŻNE!)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Command - Git Push": {
+      "main": [
+        [
+          {
+            "node": "Slack - Sukces",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "Bet Assistant",
+      "id": "1"
+    },
+    {
+      "name": "Backup",
+      "id": "4"
+    },
+    {
+      "name": "Critical",
+      "id": "5"
+    }
+  ],
+  "meta": {
+    "instanceId": "bet-assistant-daily-backup"
+  }
+}

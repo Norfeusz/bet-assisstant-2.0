@@ -509,6 +509,185 @@ Bet Assistant 2.0/
 
 ---
 
+## 11.5 SYSTEM AUTOMATYZACJI n8n
+
+### 11.5.1 Przegląd systemu
+
+Bet Assistant 2.0 wykorzystuje **n8n** do automatyzacji codziennych zadań:
+
+✅ **Codzienny import nowych meczów** (10:00 - mecze na następny dzień)  
+🔄 **Aktualizacja wyników** (0:01 - wyniki z dnia poprzedniego)  
+💾 **Backup bazy danych** (0:00 - codziennie o północy)  
+📊 **Monitoring i alerty** (co 15 min)  
+
+### 11.5.2 Architektura
+
+```
+n8n (Cron workflows)
+    │
+    ├─ HTTP Request → POST /api/webhooks/n8n/*
+    │                  Header: x-n8n-api-key
+    │
+    ▼
+Backend (localhost:3000)
+    │
+    ├─ Middleware: webhookAuth (sprawdza API key)
+    │
+    ├─ Routes: /api/webhooks/n8n/*
+    │   ├─ import-matches (POST)
+    │   ├─ update-results (POST)
+    │   ├─ backup-database (POST)
+    │   ├─ health (GET)
+    │   └─ status (GET)
+    │
+    ▼
+Services (DataImporter, ApiFootballClient, DatabaseBackup)
+    │
+    ▼
+PostgreSQL Database
+```
+
+### 11.5.3 Kluczowe pliki
+
+**Backend:**
+- `server/routes/n8n-webhooks.ts` - wszystkie webhooky
+- `server/league-config-server.ts` - import routera
+- `.env` - konfiguracja (N8N_WEBHOOK_KEY)
+
+**n8n workflows:**
+- `n8n-workflows/1-daily-import-matches.json`
+- `n8n-workflows/2-update-results-2h.json`
+- `n8n-workflows/3-daily-database-backup.json`
+- `n8n-workflows/4-monitoring-alerts.json`
+
+**Dokumentacja:**
+- `n8n-workflows/README.md` - instrukcja użytkownika
+- `Dokumentacja/n8n-automation-tech.md` - dokumentacja techniczna
+
+### 11.5.4 API Endpoints dla n8n
+
+#### Import meczów
+```http
+POST /api/webhooks/n8n/import-matches
+x-n8n-api-key: <key>
+
+Body:
+{
+  "daysAhead": 7,              // Opcjonalne
+  "leagueIds": [39, 140],      // Opcjonalne
+  "notifyEmail": "email@..."   // Opcjonalne
+}
+```
+
+#### Aktualizacja wyników
+```http
+POST /api/webhooks/n8n/update-results
+x-n8n-api-key: <key>
+
+Body:
+{
+  "daysBack": 2,               // Opcjonalne
+  "leagueIds": [39, 140]       // Opcjonalne
+}
+```
+
+#### Backup bazy
+```http
+POST /api/webhooks/n8n/backup-database
+x-n8n-api-key: <key>
+
+Body:
+{
+  "pushToGit": false,          // n8n zarządza Git
+  "skipIfNoChanges": true
+}
+```
+
+#### Health check
+```http
+GET /api/webhooks/n8n/health
+x-n8n-api-key: <key>
+```
+
+#### Status systemu
+```http
+GET /api/webhooks/n8n/status
+x-n8n-api-key: <key>
+```
+
+### 11.5.5 Różnice: n8n webhook vs Background Worker
+
+| Aspekt | n8n Webhook | Background Worker |
+|--------|-------------|-------------------|
+| **Trigger** | HTTP z n8n (Cron) | Polling bazy (pending jobs) |
+| **Kolejka** | Brak - bezpośrednie wykonanie | Tak - import_jobs table |
+| **Resume** | Nie | Tak (progress tracking) |
+| **Szybkość** | Szybsze (no queue) | Wolniejsze (queue + DB) |
+| **Przypadek użycia** | Automatyzacja | Ręczne zadania z UI |
+
+**WAŻNE:** Oba systemy działają równolegle:
+- **UI → Kolejka → Worker** - dla ręcznych importów użytkownika
+- **n8n → Webhook → Direct** - dla automatycznych zadań
+
+### 11.5.6 Bezpieczeństwo
+
+**Autoryzacja:**
+- Każdy endpoint wymaga nagłówka `x-n8n-api-key`
+- Klucz musi być identyczny w `.env` i n8n
+- Brak klucza → 401 Unauthorized
+
+**Generowanie klucza:**
+```powershell
+# PowerShell
+$bytes = New-Object byte[] 32
+[Security.Cryptography.RNGCryptoServiceProvider]::Create().GetBytes($bytes)
+[Convert]::ToBase64String($bytes)
+```
+
+**Konfiguracja:**
+```env
+# .env
+N8N_WEBHOOK_KEY=your-generated-secure-key-32-chars
+```
+
+### 11.5.7 Modyfikacje systemu n8n
+
+**Gdy dodajesz nowy webhook:**
+1. Dodaj endpoint w `server/routes/n8n-webhooks.ts`
+2. Zastosuj `webhookAuth` middleware (router.use)
+3. Zwróć zawsze JSON z `success: true/false`
+4. Dodaj timeouty (300s dla długich operacji)
+5. Dokumentuj w `n8n-workflows/README.md`
+6. Utwórz przykładowy workflow JSON
+
+**Gdy modyfikujesz istniejący:**
+1. Sprawdź czy nie łamiesz kompatybilności
+2. Aktualizuj dokumentację
+3. Testuj lokalnie przed deploymentem
+4. Update workflows w n8n jeśli potrzebne
+
+### 11.5.8 Troubleshooting n8n
+
+**Problem: "Unauthorized"**
+- Sprawdź `N8N_WEBHOOK_KEY` w `.env` i n8n
+- Restart serwera po zmianie `.env`
+
+**Problem: Timeout**
+- Zwiększ timeout w n8n HTTP Request node
+- Zmniejsz zakres dat/lig w request
+
+**Problem: Rate limit API Football**
+- Zmniejsz częstotliwość workflows
+- Ogranicz liczbę lig
+- Sprawdź plan API Football (FREE vs PREMIUM)
+
+**Debug:**
+1. Sprawdź logi serwera backend w terminalu
+2. Sprawdź execution logs w n8n UI
+3. Test endpoint ręcznie (curl/Postman)
+
+---
+
 ## 12. ETAPY MIGRACJI (OBECNY PROJEKT)
 
 Projekt: Migracja z vanilla JS → React + TypeScript
@@ -532,10 +711,17 @@ Projekt: Migracja z vanilla JS → React + TypeScript
 
 ## OSTATNIA AKTUALIZACJA
 
-- **Data:** 30 grudnia 2025
-- **Wersja:** 1.0
-- **Status:** Inicjalizacja projektu - Git setup + GitHub integration
-- **Następny krok:** ETAP 1 - Infrastruktura
+- **Data:** 19 lutego 2026
+- **Wersja:** 1.1
+- **Status:** System n8n automation dodany - pełna automatyzacja importu
+- **Następny krok:** ETAP 1 - Infrastruktura + deploy n8n workflows
+
+**Nowe funkcje:**
+- ✅ Dedykowane endpointy n8n (`/api/webhooks/n8n/*`)
+- ✅ 4 workflows: import, update, backup, monitoring
+- ✅ Autoryzacja API key
+- ✅ Health checks i alerty
+- ✅ Pełna dokumentacja (użytkownik + tech)
 
 ---
 

@@ -101,6 +101,9 @@ function FilterPanelWithCheckboxes({
     // Kraj i Liga
     { key: 'country', label: 'Kraj', value: matchData.country || '-', section: 'Lokalizacja' },
     { key: 'league', label: 'Liga', value: matchData.league || '-', section: 'Lokalizacja' },
+    
+    // Faza
+    { key: 'phase', label: 'Faza', value: matchData.phase || '-', section: 'Faza' },
   ]
 
   // Grupuj filtry według sekcji

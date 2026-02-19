@@ -19,6 +19,7 @@ import verifyBetsRouter from './routes/verify-bets'
 import analyticsRouter from './routes/analytics'
 import betFinderRouter from './routes/bet-finder'
 import databaseRouter from './routes/database'
+import n8nWebhooksRouter from './routes/n8n-webhooks'
 
 dotenv.config()
 
@@ -59,6 +60,9 @@ app.use('/api', betFinderRouter)
 
 // Database Browser routes
 app.use('/api', databaseRouter)
+
+// n8n Webhooks routes (z autoryzacją)
+app.use('/api', n8nWebhooksRouter)
 
 // Open in VSCode endpoint
 app.post('/api/open-vscode', (req, res) => {

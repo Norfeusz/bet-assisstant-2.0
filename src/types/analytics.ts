@@ -34,6 +34,7 @@ export interface BetData {
   league: string | null
   matchDate: Date | null
   matchId: number | null
+  phase: string | null
 }
 
 export interface AnalyticsFilters {
@@ -67,6 +68,9 @@ export interface AnalyticsFilters {
   // Szanse drużyny (przedziały)
   teamChancesRange5?: string  // 60-64%, 65-69%
   teamChancesRange10?: string // 60-69%, 70-79%
+  
+  // Faza
+  phase?: string // A, B, C, A+B, B+C
 }
 
 export interface AnalyticsResult {

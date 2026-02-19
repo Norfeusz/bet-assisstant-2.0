@@ -58,6 +58,7 @@ interface BetAnalytics {
 	league: string | null
 	matchDate: Date | null
 	matchId: number | null
+	phase: string | null
 }
 
 /**
@@ -127,7 +128,8 @@ router.get('/analytics/bets', async (req, res) => {
 			country: row[26] || null,        // AA
 			league: row[27] || null,         // AB
 			matchDate: row[28] ? new Date(row[28]) : null, // AC
-			matchId: row[29] ? parseInt(row[29]) : null    // AD
+			matchId: row[29] ? parseInt(row[29]) : null,   // AD
+			phase: row[44] || null           // AS
 		}))
 
 		// Filtry
@@ -311,7 +313,8 @@ router.get('/analytics/bet-builder', async (req, res) => {
 			country: row[26] || null,
 			league: row[27] || null,
 			matchDate: row[28] ? new Date(row[28]) : null,
-			matchId: row[29] ? parseInt(row[29]) : null
+			matchId: row[29] ? parseInt(row[29]) : null,
+			phase: row[44] || null
 		}))
 
 		res.json({

@@ -144,14 +144,45 @@ class BackgroundImportWorker {
 	}
 
 	private async loadLeagueConfigs(): Promise<LeagueConfig[]> {
-		// Fetch leagues from the API endpoint
+		// Read leagues from master config file (never modified by worker)
 		try {
-			const response = await fetch('http://localhost:3000/api/config')
-			const data = (await response.json()) as { leagues: LeagueConfig[] }
-			return data.leagues
+			// Try main config first
+			let configPath = path.join(process.cwd(), 'data', 'leagues.json')
+			
+			// If main config has been corrupted (only 1 league), try backup
+			const configData = fs.readFileSync(configPath, 'utf-8')
+			const leagues = JSON.parse(configData) as LeagueConfig[]
+			
+			// Verify we have a reasonable number of leagues (should be 50+)
+			if (leagues.length < 10) {
+				console.warn(`⚠️  Main config has only ${leagues.length} leagues, trying backup...`)
+				
+				// Look for the most recent backup file
+				const backupFiles = fs.readdirSync(path.join(process.cwd(), 'logs'))
+					.filter(f => f.startsWith('backup-config-'))
+					.sort()
+					.reverse()
+				
+				if (backupFiles.length > 0) {
+					const backupPath = path.join(process.cwd(), 'logs', backupFiles[0])
+					const backupData = fs.readFileSync(backupPath, 'utf-8')
+					const backupLeagues = JSON.parse(backupData) as LeagueConfig[]
+					
+					if (backupLeagues.length >= 10) {
+						console.log(`✅ Restored ${backupLeagues.length} leagues from backup: ${backupFiles[0]}`)
+						// Restore main config
+						fs.writeFileSync(configPath, backupData)
+						return backupLeagues
+					}
+				}
+				
+				throw new Error(`Config file corrupted: only ${leagues.length} leagues found and no valid backup available`)
+			}
+			
+			return leagues
 		} catch (error) {
-			console.error('Error loading league configs from API:', error)
-			throw new Error('Failed to load league configurations')
+			console.error('Error loading league configs from file:', error)
+			throw new Error('Failed to load league configurations from data/leagues.json')
 		}
 	}
 
@@ -160,12 +191,12 @@ private async processJob(job: ImportJob): Promise<void> {
 	
 	this.log(job.id, `${isResume ? 'Resuming' : 'Starting'} job: ${job.leagues.length} leagues, ${job.date_from} to ${job.date_to}`)
 
-	// Only update started_at if this is a new job
-	if (!isResume && !job.started_at) {
+	// Always set started_at if not set (even for resumed jobs)
+	if (!job.started_at) {
 		await this.updateJobStatus(job.id, 'running', {
 			...job,
 			started_at: new Date(),
-			progress: {
+			progress: isResume ? job.progress : {
 				completed_leagues: [],
 				current_league: undefined,
 				current_date: undefined,
@@ -218,6 +249,15 @@ private async processJob(job: ImportJob): Promise<void> {
 			let cumulativeImported = job.imported_matches || 0
 			let cumulativeFailed = job.failed_matches || 0
 
+			// Create backup of main config ONCE before processing any leagues
+			const mainConfigPath = path.join(process.cwd(), 'data', 'leagues.json')
+			const backupConfigPath = path.join(process.cwd(), 'logs', `backup-config-${job.id}.json`)
+			
+			if (fs.existsSync(mainConfigPath) && !fs.existsSync(backupConfigPath)) {
+				this.log(job.id, '💾 Creating backup of main league configuration...')
+				fs.copyFileSync(mainConfigPath, backupConfigPath)
+			}
+
 			for (const league of remainingLeagues) {
 				this.log(job.id, `Processing league: ${league.name} (${league.country})`)
 
@@ -233,7 +273,6 @@ private async processJob(job: ImportJob): Promise<void> {
 
 			// Import matches for this league - create temp config with single league
 			const tempConfigPath = path.join(process.cwd(), 'logs', `temp-config-${job.id}-${league.id}.json`)
-			const mainConfigPath = path.join(process.cwd(), 'data', 'leagues.json')
 
 			// Write temp config for single league with all required fields
 			const tempLeagueConfig = {
@@ -247,17 +286,7 @@ private async processJob(job: ImportJob): Promise<void> {
 			fs.writeFileSync(tempConfigPath, JSON.stringify([tempLeagueConfig], null, 2))
 
 			try {
-				// Backup existing config if it exists
-				let hadExistingConfig = false
-				let backupConfigPath = ''
-
-					if (fs.existsSync(mainConfigPath)) {
-						hadExistingConfig = true
-						backupConfigPath = path.join(process.cwd(), 'logs', `backup-config-${job.id}.json`)
-						fs.copyFileSync(mainConfigPath, backupConfigPath)
-					}
-
-					// Use temp config
+					// Use temp config (backup already created before loop)
 					fs.copyFileSync(tempConfigPath, mainConfigPath)
 
 					// Create fresh importer with single league
@@ -281,16 +310,7 @@ private async processJob(job: ImportJob): Promise<void> {
 					)
 				}
 
-					// Restore original config if it existed
-					if (hadExistingConfig && backupConfigPath && fs.existsSync(backupConfigPath)) {
-						fs.copyFileSync(backupConfigPath, mainConfigPath)
-						fs.unlinkSync(backupConfigPath)
-					} else if (!hadExistingConfig && fs.existsSync(mainConfigPath)) {
-						// Remove temp config file if we created it
-						fs.unlinkSync(mainConfigPath)
-					}
-
-					// Cleanup temp file
+					// Cleanup temp file after processing this league
 					if (fs.existsSync(tempConfigPath)) {
 						fs.unlinkSync(tempConfigPath)
 					}
@@ -400,20 +420,7 @@ private async processJob(job: ImportJob): Promise<void> {
 				this.log(job.id, '⏸️  Rate limit reached, pausing job for 15 minutes')
 				this.log(job.id, `⚠️  League ${league.name} will be retried after rate limit reset`)
 
-				// Cleanup all temp files before exiting
-				const backupConfigPath = path.join(process.cwd(), 'logs', `backup-config-${job.id}.json`)
-
-				// Only restore backup if it exists
-				if (fs.existsSync(backupConfigPath)) {
-					try {
-						fs.copyFileSync(backupConfigPath, mainConfigPath)
-						fs.unlinkSync(backupConfigPath)
-					} catch (restoreError: any) {
-						this.log(job.id, `⚠️  Warning: Could not restore config backup: ${restoreError.message}`)
-					}
-				}
-				
-				// Remove temp config if it exists
+				// Cleanup temp config (but keep backup for final restoration)
 				if (fs.existsSync(tempConfigPath)) {
 					try {
 						fs.unlinkSync(tempConfigPath)
@@ -437,17 +444,7 @@ private async processJob(job: ImportJob): Promise<void> {
 				return // Exit immediately, don't continue with other leagues
 			}
 
-			// For other errors, cleanup and continue with next league
-
-				// Only restore backup if it exists
-				if (fs.existsSync(backupConfigPath)) {
-					try {
-						fs.copyFileSync(backupConfigPath, originalConfigPath)
-						fs.unlinkSync(backupConfigPath)
-					} catch (restoreError: any) {
-						this.log(job.id, `⚠️  Warning: Could not restore config backup: ${restoreError.message}`)
-					}
-				}
+			// For other errors, cleanup temp files and continue with next league
 				
 				// Remove temp config if it exists
 				if (fs.existsSync(tempConfigPath)) {
@@ -481,14 +478,36 @@ private async processJob(job: ImportJob): Promise<void> {
 			}
 		}
 
-		// Job completed
+		// Validate job completion
+		if (completedLeagues.length < selectedLeagues.length) {
+			// Not all leagues were processed - do NOT mark as completed
+			const missing = selectedLeagues.filter(l => !completedLeagues.includes(l.id)).map(l => l.name)
+			this.log(job.id, `⚠️  ERROR: Only ${completedLeagues.length}/${selectedLeagues.length} leagues were completed`)
+			this.log(job.id, `⚠️  Missing leagues: ${missing.join(', ')}`)
+			this.log(job.id, `⚠️  Job will remain in current state and can be resumed manually`)
+			
+			// Don't mark as completed - leave in current state (likely running or rate_limited)
+			return
+		}
+
+		// Check if anything was actually imported
+		if (cumulativeImported === 0 && cumulativeFailed === 0) {
+			this.log(job.id, `📝 Job completed with no changes - all matches were already up to date`)
+		}
+
+		// Job completed successfully - all leagues processed
 			await this.updateJobStatus(job.id, 'completed', {
 				imported_matches: cumulativeImported,
 				failed_matches: cumulativeFailed,
 			} as any)
 
-		this.log(job.id, `✅ Job completed successfully`)
-
+		if (cumulativeImported > 0) {
+			this.log(job.id, `✅ Job completed successfully - ${cumulativeImported} matches imported${cumulativeFailed > 0 ? `, ${cumulativeFailed} failed` : ''}`)
+		} else if (cumulativeFailed > 0) {
+			this.log(job.id, `⚠️  Job completed with errors - ${cumulativeFailed} matches failed`)
+		} else {
+			this.log(job.id, `✅ Job completed successfully - all matches were already up to date`)
+		}
 		// Promote next job in queue
 		await this.promoteNextQueuedJob()
 
@@ -527,6 +546,21 @@ private async processJob(job: ImportJob): Promise<void> {
 				'Import Job Failed',
 				`Job #${job.id} has failed.\n\n` + `Error: ${error.message}\n\n` + `Stack trace:\n${error.stack}`
 			)
+		} finally {
+			// Always restore main config after job completes (success or failure)
+			const mainConfigPath = path.join(process.cwd(), 'data', 'leagues.json')
+			const backupConfigPath = path.join(process.cwd(), 'logs', `backup-config-${job.id}.json`)
+			
+			if (fs.existsSync(backupConfigPath)) {
+				try {
+					this.log(job.id, '🔄 Restoring main league configuration...')
+					fs.copyFileSync(backupConfigPath, mainConfigPath)
+					fs.unlinkSync(backupConfigPath)
+					this.log(job.id, '✅ Main configuration restored')
+				} catch (restoreError: any) {
+					console.error(`⚠️  Could not restore main config for job ${job.id}: ${restoreError.message}`)
+				}
+			}
 		}
 	}
 
@@ -562,7 +596,7 @@ private async processJob(job: ImportJob): Promise<void> {
 			console.log('🔍 Checking for pending jobs...')
 
 		// Find jobs that need processing
-		// Priority: 1. rate_limited jobs ready to resume, 2. pending jobs (ONLY if no active/paused job exists)
+		// Priority: 1. rate_limited ready to resume, 2. pending, 3. in_queue (all ONLY if no active jobs)
 		const jobs = await prisma.$queryRaw<ImportJob[]>`
 			SELECT * FROM import_jobs
 			WHERE (
@@ -577,11 +611,21 @@ private async processJob(job: ImportJob): Promise<void> {
 						WHERE status IN ('running', 'rate_limited')
 					)
 				)
+				OR
+				-- In-queue jobs ONLY if there are NO running, rate_limited, or pending jobs
+				(
+					status = 'in_queue'
+					AND NOT EXISTS (
+						SELECT 1 FROM import_jobs 
+						WHERE status IN ('running', 'rate_limited', 'pending')
+					)
+				)
 			)
 			ORDER BY 
 				CASE 
 					WHEN status = 'rate_limited' THEN 1
 					WHEN status = 'pending' THEN 2
+					WHEN status = 'in_queue' THEN 3
 				END,
 				created_at ASC
 			LIMIT 1
@@ -608,6 +652,12 @@ private async processJob(job: ImportJob): Promise<void> {
 					...job,
 					rate_limit_reset_at: null,
 				} as any)
+			}
+
+			// If picking up in_queue job, promote it to pending first
+			if (job.status === 'in_queue') {
+				console.log(`📋 Promoting job #${job.id} from queue to pending`)
+				await this.updateJobStatus(job.id, 'pending', job as any)
 			}
 
 			try {

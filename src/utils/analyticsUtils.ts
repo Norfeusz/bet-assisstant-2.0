@@ -237,6 +237,27 @@ export function extractUniqueValues(bets: BetData[], field: keyof BetData): stri
 }
 
 /**
+ * Wydobywa unikalne fazy i generuje kombinacje sąsiednich faz
+ */
+export function extractPhaseOptions(bets: BetData[]): string[] {
+  const phases = extractUniqueValues(bets, 'phase')
+  
+  // Jeśli nie ma faz, zwróć pustą tablicę
+  if (phases.length === 0) return []
+  
+  // Sortuj alfabetycznie
+  phases.sort()
+  
+  // Dodaj kombinacje sąsiednich faz
+  const options = [...phases]
+  for (let i = 0; i < phases.length - 1; i++) {
+    options.push(`${phases[i]}+${phases[i + 1]}`)
+  }
+  
+  return options
+}
+
+/**
  * Parsuje wartość procentową ze stringa (np. "65%" -> 65)
  */
 function parsePercent(value: string | null): number | null {
@@ -396,6 +417,22 @@ export function filterBets(bets: BetData[], filters: AnalyticsFilters): BetData[
     // Liga
     if (filters.league && bet.league !== filters.league) {
       return false
+    }
+    
+    // Faza
+    if (filters.phase) {
+      // Obsługa kombinacji A+B, B+C itp.
+      if (filters.phase.includes('+')) {
+        const phases = filters.phase.split('+')
+        if (!bet.phase || !phases.includes(bet.phase)) {
+          return false
+        }
+      } else {
+        // Pojedyncza faza
+        if (bet.phase !== filters.phase) {
+          return false
+        }
+      }
     }
     
     return true

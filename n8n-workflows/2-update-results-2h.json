@@ -1,0 +1,280 @@
+{
+  "name": "Bet Assistant - Aktualizacja Wyników (co 2h)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "1 0 * * *"
+            }
+          ]
+        }
+      },
+      "name": "Cron: Codziennie o 0:01",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "id": "cron-daily-0001",
+      "notes": "Aktualizacja wyników z poprzedniego dnia"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "apiKey",
+              "value": "={{ $env.BET_ASSISTANT_WEBHOOK_KEY }}"
+            }
+          ],
+          "number": [
+            {
+              "name": "daysBack",
+              "value": 1
+            }
+          ]
+        }
+      },
+      "name": "Ustaw parametry aktualizacji",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        460,
+        300
+      ],
+      "id": "set-update-params",
+      "notes": "daysBack=1 oznacza aktualizację meczów z dnia poprzedniego"
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.BET_ASSISTANT_API_URL }}/api/webhooks/n8n/update-results",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-n8n-api-key",
+              "value": "={{ $json.apiKey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "daysBack",
+              "value": "={{ $json.daysBack }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "name": "HTTP Request - Update Results",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        680,
+        300
+      ],
+      "id": "http-update-results",
+      "notes": "Timeout 3 minuty (180000ms)"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.success }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "Sprawdź czy sukces",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ],
+      "id": "check-success"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.stats.updated }}",
+              "operation": "largerEqual",
+              "value2": 10
+            }
+          ]
+        }
+      },
+      "name": "Czy dużo aktualizacji?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        200
+      ],
+      "id": "check-significant-updates",
+      "notes": "Wyślij powiadomienie tylko gdy zaktualizowano >= 10 meczów"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "text": "🔄 Aktualizacja wyników zakończona\n\n📊 Statystyki:\n• Zaktualizowano: {{ $json.stats.updated }} meczów\n• Błędy: {{ $json.stats.failed }}\n• Lig: {{ $json.stats.leagues }}\n\n⏱️ Czas: {{ $json.timing.durationSeconds }}s\n📅 Zakres: {{ $json.timing.dateRange.from }} → {{ $json.timing.dateRange.to }}\n\n🔄 API: {{ $json.rateLimit.remaining }}/{{ $json.rateLimit.limit }}",
+        "additionalFields": {}
+      },
+      "name": "Slack - Raport aktualizacji",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1340,
+        200
+      ],
+      "id": "slack-update-report",
+      "credentials": {
+        "slackApi": {
+          "id": "1",
+          "name": "Slack account"
+        }
+      },
+      "disabled": true,
+      "notes": "Opcjonalne"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "text": "❌ Błąd aktualizacji wyników!\n\n{{ $json.error }}\n\n📊 Częściowe:\n{{ JSON.stringify($json.partialStats, null, 2) }}",
+        "additionalFields": {}
+      },
+      "name": "Slack - Błąd",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        400
+      ],
+      "id": "slack-error",
+      "credentials": {
+        "slackApi": {
+          "id": "1",
+          "name": "Slack account"
+        }
+      },
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ {\n  timestamp: $now.toISO(),\n  type: 'update_results',\n  success: $json.success,\n  stats: $json.stats,\n  rateLimit: $json.rateLimit,\n  duration: $json.timing.durationSeconds\n} }}",
+        "options": {}
+      },
+      "name": "Loguj do pliku/bazy",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        100
+      ],
+      "id": "log-results",
+      "disabled": true,
+      "notes": "Opcjonalne: Podłącz do systemu logowania"
+    }
+  ],
+  "connections": {
+    "Cron: Co 2 godziny": {
+      "main": [
+        [
+          {
+            "node": "Ustaw parametry aktualizacji",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ustaw parametry aktualizacji": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - Update Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - Update Results": {
+      "main": [
+        [
+          {
+            "node": "Sprawdź czy sukces",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sprawdź czy sukces": {
+      "main": [
+        [
+          {
+            "node": "Czy dużo aktualizacji?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Loguj do pliku/bazy",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack - Błąd",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Czy dużo aktualizacji?": {
+      "main": [
+        [
+          {
+            "node": "Slack - Raport aktualizacji",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "Bet Assistant",
+      "id": "1"
+    },
+    {
+      "name": "Updates",
+      "id": "3"
+    }
+  ],
+  "meta": {
+    "instanceId": "bet-assistant-update-results"
+  }
+}

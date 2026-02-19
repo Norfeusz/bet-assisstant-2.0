@@ -1,0 +1,267 @@
+{
+  "name": "Bet Assistant - Codzienny Import Nowych Meczów",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 10 * * *"
+            }
+          ]
+        }
+      },
+      "name": "Cron: Codziennie o 10:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "id": "cron-daily-10am"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "dateFrom",
+              "value": "={{ $today.toFormat('yyyy-MM-dd') }}"
+            },
+            {
+              "name": "dateTo",
+              "value": "={{ $today.plus({ days: 7 }).toFormat('yyyy-MM-dd') }}"
+            },
+            {
+              "name": "apiKey",
+              "value": "={{ $env.BET_ASSISTANT_WEBHOOK_KEY }}"
+            }
+          ],
+          "number": [
+            {
+              "name": "daysAhead",
+              "value": 1
+            }
+          ]
+        }
+      },
+      "name": "Ustaw parametry importu",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        460,
+        300
+      ],
+      "id": "set-import-params"
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.BET_ASSISTANT_API_URL }}/api/webhooks/n8n/import-matches",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-n8n-api-key",
+              "value": "={{ $json.apiKey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "daysAhead",
+              "value": "={{ $json.daysAhead }}"
+            },
+            {
+              "name": "notifyEmail",
+              "value": "={{ $env.NOTIFICATION_EMAIL }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "name": "HTTP Request - Import Matches",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        680,
+        300
+      ],
+      "id": "http-import-matches"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.success }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "Sprawdź czy sukces",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ],
+      "id": "check-success"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "text": "✅ Codzienny import zakończony sukcesem!\n\n📊 Statystyki:\n• Zaimportowano: {{ $json.stats.imported }} meczów\n• Pominięto (duplikaty): {{ $json.stats.skipped }}\n• Błędy: {{ $json.stats.failed }}\n• Lig przetworzonych: {{ $json.stats.leagues }}\n\n⏱️ Czas wykonania: {{ $json.timing.durationSeconds }}s\n📅 Zakres dat: {{ $json.timing.dateRange.from }} → {{ $json.timing.dateRange.to }}\n\n🔄 Pozostałe requesty API: {{ $json.rateLimit.remaining }}/{{ $json.rateLimit.limit }}",
+        "additionalFields": {}
+      },
+      "name": "Slack - Sukces",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        200
+      ],
+      "id": "slack-success",
+      "credentials": {
+        "slackApi": {
+          "id": "1",
+          "name": "Slack account"
+        }
+      },
+      "disabled": true,
+      "notes": "Opcjonalne: Włącz jeśli używasz Slacka"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "text": "❌ Błąd podczas codziennego importu!\n\n🚨 Szczegóły:\n{{ $json.error }}\n\n📊 Częściowe statystyki:\n{{ JSON.stringify($json.partialStats, null, 2) }}\n\n⏱️ Czas do błędu: {{ $json.timing.durationSeconds }}s\n🕐 Timestamp: {{ $json.timing.failedAt }}",
+        "additionalFields": {}
+      },
+      "name": "Slack - Błąd",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        400
+      ],
+      "id": "slack-error",
+      "credentials": {
+        "slackApi": {
+          "id": "1",
+          "name": "Slack account"
+        }
+      },
+      "disabled": true,
+      "notes": "Opcjonalne: Włącz jeśli używasz Slacka"
+    },
+    {
+      "parameters": {
+        "operation": "sendEmail",
+        "fromEmail": "={{ $env.SMTP_USER }}",
+        "toEmail": "={{ $env.NOTIFICATION_EMAIL }}",
+        "subject": "✅ Bet Assistant: Codzienny import zakończony",
+        "emailFormat": "html",
+        "text": "<h2>✅ Codzienny import zakończony sukcesem!</h2>\n\n<h3>📊 Statystyki:</h3>\n<ul>\n<li>Zaimportowano: <b>{{ $json.stats.imported }}</b> meczów</li>\n<li>Pominięto (duplikaty): <b>{{ $json.stats.skipped }}</b></li>\n<li>Błędy: <b>{{ $json.stats.failed }}</b></li>\n<li>Lig przetworzonych: <b>{{ $json.stats.leagues }}</b></li>\n</ul>\n\n<h3>⏱️ Wydajność:</h3>\n<ul>\n<li>Czas wykonania: <b>{{ $json.timing.durationSeconds }}s</b></li>\n<li>Zakres dat: <b>{{ $json.timing.dateRange.from }}</b> → <b>{{ $json.timing.dateRange.to }}</b></li>\n</ul>\n\n<h3>🔄 Limity API:</h3>\n<ul>\n<li>Pozostałe requesty: <b>{{ $json.rateLimit.remaining }}</b>/{{ $json.rateLimit.limit }}</li>\n<li>Reset: <b>{{ $json.rateLimit.resetAt }}</b></li>\n</ul>",
+        "options": {}
+      },
+      "name": "Email - Sukces",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        100
+      ],
+      "id": "email-success",
+      "credentials": {
+        "smtp": {
+          "id": "2",
+          "name": "SMTP account"
+        }
+      },
+      "disabled": true,
+      "notes": "Opcjonalne: Włącz jeśli chcesz email notifications"
+    }
+  ],
+  "connections": {
+    "Cron: Codziennie o 6:00": {
+      "main": [
+        [
+          {
+            "node": "Ustaw parametry importu",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ustaw parametry importu": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - Import Matches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - Import Matches": {
+      "main": [
+        [
+          {
+            "node": "Sprawdź czy sukces",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sprawdź czy sukces": {
+      "main": [
+        [
+          {
+            "node": "Slack - Sukces",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Email - Sukces",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack - Błąd",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "Bet Assistant",
+      "id": "1"
+    },
+    {
+      "name": "Daily",
+      "id": "2"
+    }
+  ],
+  "meta": {
+    "instanceId": "bet-assistant-daily-import"
+  }
+}

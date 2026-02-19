@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import type { BetData, AnalyticsFilters } from '../../types/analytics'
 import {
   extractUniqueValues,
+  extractPhaseOptions,
   extractActualPercentRanges5,
   extractActualPercentRanges10,
   extractActualOddsRanges005,
@@ -45,6 +46,7 @@ function FilterPanel({ bets, filters, onFilterChange, onClearFilters }: FilterPa
       betOptions: getOptionsForField('betOption', getUniqueValues('betOption')),
       countries: getOptionsForField('country', getUniqueValues('country')),
       leagues: getOptionsForField('league', getUniqueValues('league')),
+      phases: getOptionsForField('phase', extractPhaseOptions),
       percentRanges5: getOptionsForField('chancesRange5', extractActualPercentRanges5),
       percentRanges10: getOptionsForField('chancesRange10', extractActualPercentRanges10),
       oddsRanges005: getOptionsForField('oddsRange005', extractActualOddsRanges005),
@@ -269,6 +271,24 @@ function FilterPanel({ bets, filters, onFilterChange, onClearFilters }: FilterPa
               <option value="">-- Wszystkie --</option>
               {options.leagues.map(league => (
                 <option key={league} value={league}>{league}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Faza */}
+        <div className={styles.section}>
+          <h4 className={styles.sectionTitle}>Faza</h4>
+          
+          <div className={styles.field}>
+            <label>Faza</label>
+            <select 
+              value={filters.phase || ''} 
+              onChange={(e) => handleChange('phase', e.target.value)}
+            >
+              <option value="">-- Wszystkie --</option>
+              {options.phases.map(phase => (
+                <option key={phase} value={phase}>{phase}</option>
               ))}
             </select>
           </div>
