@@ -1,13 +1,13 @@
 {
-  "startDate": "2026-02-19",
-  "endDate": "2026-02-19",
-  "currentDate": "2026-02-19",
+  "startDate": "2026-02-20",
+  "endDate": "2026-02-20",
+  "currentDate": "2026-02-20",
   "leagueIds": [
-    297
+    63
   ],
   "currentLeagueIndex": 0,
   "matchesImported": 0,
-  "startedAt": "2026-02-17T13:11:48.733Z",
-  "lastUpdated": "2026-02-17T13:11:50.740Z",
-  "status": "completed"
+  "startedAt": "2026-02-19T23:15:48.783Z",
+  "lastUpdated": "2026-02-19T23:15:48.783Z",
+  "status": "in-progress"
 }

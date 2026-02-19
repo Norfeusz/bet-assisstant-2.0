@@ -62,7 +62,7 @@ app.use('/api', betFinderRouter)
 app.use('/api', databaseRouter)
 
 // n8n Webhooks routes (z autoryzacją)
-app.use('/api', n8nWebhooksRouter)
+app.use('/api/webhooks/n8n', n8nWebhooksRouter)
 
 // Open in VSCode endpoint
 app.post('/api/open-vscode', (req, res) => {

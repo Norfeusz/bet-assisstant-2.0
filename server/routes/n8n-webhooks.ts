@@ -36,9 +36,6 @@ const webhookAuth = (req: express.Request, res: express.Response, next: express.
 	next()
 }
 
-// Zastosuj autoryzację do wszystkich endpointów webhooków
-router.use(webhookAuth)
-
 // ====================================
 // WEBHOOK: Import nowych meczów
 // ====================================
@@ -50,7 +47,7 @@ interface ImportWebhookRequest {
 	notifyEmail?: string        // Email do powiadomień
 }
 
-router.post('/webhooks/n8n/import-matches', async (req, res) => {
+router.post('/import-matches', webhookAuth, async (req, res) => {
 	const startTime = Date.now()
 	let importerInstance: DataImporter | null = null
 	
@@ -194,7 +191,7 @@ interface UpdateResultsWebhookRequest {
 	notifyEmail?: string        
 }
 
-router.post('/webhooks/n8n/update-results', async (req, res) => {
+router.post('/update-results', webhookAuth, async (req, res) => {
 	const startTime = Date.now()
 	let importerInstance: DataImporter | null = null
 	
@@ -322,7 +319,7 @@ router.post('/webhooks/n8n/update-results', async (req, res) => {
 // ====================================
 // WEBHOOK: Health check
 // ====================================
-router.get('/webhooks/n8n/health', async (req, res) => {
+router.get('/health', webhookAuth, async (req, res) => {
 	try {
 		// Sprawdź połączenie z bazą
 		await prisma.$queryRaw`SELECT 1`
@@ -352,7 +349,7 @@ router.get('/webhooks/n8n/health', async (req, res) => {
 // ====================================
 // WEBHOOK: Status systemu (dla monitoringu)
 // ====================================
-router.get('/webhooks/n8n/status', async (req, res) => {
+router.get('/status', webhookAuth, async (req, res) => {
 	try {
 		// Statystyki z bazy
 		const [matchCount, leagueCount, recentImports] = await Promise.all([
@@ -411,7 +408,7 @@ interface BackupWebhookRequest {
 	notifyEmail?: string        
 }
 
-router.post('/webhooks/n8n/backup-database', async (req, res) => {
+router.post('/backup-database', webhookAuth, async (req, res) => {
 	const startTime = Date.now()
 	
 	try {
