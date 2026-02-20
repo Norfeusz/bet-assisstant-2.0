@@ -10,10 +10,12 @@
     "lint": "tsc --noEmit",
     "server": "nodemon --exec npx tsx server/league-config-server.ts",
     "server:worker": "npx tsx server/background-import-worker.ts",
+    "start": "npx tsx server/league-config-server.ts", 
     "db:generate": "prisma generate",
     "db:studio": "prisma studio",
     "db:migrate": "prisma migrate dev"
   },
+
   "dependencies": {
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -27,7 +29,8 @@
     "googleapis": "^167.0.0",
     "nodemailer": "^7.0.10",
     "pg": "^8.13.1",
-    "prisma": "^6.18.0"
+    "prisma": "^6.18.0",
+    "tsx": "^4.19.2"
   },
   "devDependencies": {
     "@types/react": "^18.3.18",
@@ -38,7 +41,6 @@
     "@types/pg": "^8.11.10",
     "@vitejs/plugin-react": "^5.1.2",
     "nodemon": "^3.1.10",
-    "tsx": "^4.19.2",
     "typescript": "^5.9.3",
     "vite": "^5.4.21"
   }
