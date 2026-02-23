@@ -113,9 +113,9 @@ router.post('/import-matches', webhookAuth, async (req, res) => {
 		const leagueSelector = new LeagueSelector(apiClient)
 		importerInstance = new DataImporter(apiClient, leagueSelector)
 
-		// Import dla wszystkich lig jednocześnie (używa istniejącej konfiguracji)
-		await importerInstance.importDateRange(startDate, endDate, false, false)
-
+		// Import dla wszystkich lig jednocześnie (używa istniejącej konfiguracji z auto-retry)
+		await importerInstance.importDateRange(startDate, endDate, false, true) // autoRetry: true
+		
 		// Pobierz statystyki
 		const progress = importerInstance.getProgress()
 		const rateLimitInfo = importerInstance.getRateLimitInfo()
