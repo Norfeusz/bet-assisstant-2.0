@@ -436,35 +436,20 @@ export class DataImporter {
 		}
 
 		try {
-// Try to fetch fixtures - for Jan-Jul in split-year leagues, check previous season too
+// Try to fetch fixtures - for Jan-Jul, fetch from BOTH current and previous season
 		const fromDateObj = new Date(fromDate)
 		const currentYear = fromDateObj.getFullYear()
-		
-		// Countries/regions that use split-year seasons (typically Aug-May/Jun)
-		const SPLIT_YEAR_REGIONS = [
-			'England', 'Spain', 'Italy', 'Germany', 'France', 'Netherlands', 'Portugal', 
-			'Belgium', 'Scotland', 'Turkey', 'Russia', 'Ukraine', 'Greece', 'Poland',
-			'Argentina', 'Brazil', 'Uruguay', 'Chile', 'Colombia', 'Ecuador', 'Peru',
-			'USA', 'Mexico', 'World' // World = UEFA competitions
-		]
 		
 		console.log(`  🔍 Fetching fixtures: league=${league.id}, season=${currentYear}, from=${fromDate}, to=${toDate}`)
 
 		// Try current year season first
 		let fixtures = await this.apiClient.getLeagueFixtures(league.id, currentYear, { from: fromDate, to: toDate })
 
-		// If no fixtures found and month is Jan-Jul, try previous year (ONLY for split-year leagues)
-		// This avoids wasting API calls on calendar-year leagues (most Asian, African leagues)
+		// If no fixtures found and month is Jan-Jul, try previous year (for split-year leagues)
 		if (fixtures.length === 0 && fromDateObj.getMonth() < 7) {
-			const isSplitYearLeague = SPLIT_YEAR_REGIONS.includes(league.country)
-			
-			if (isSplitYearLeague) {
-				const previousYear = currentYear - 1
-				console.log(`  📅 No fixtures in season ${currentYear}, trying season ${previousYear} (split-year league)...`)
-				fixtures = await this.apiClient.getLeagueFixtures(league.id, previousYear, { from: fromDate, to: toDate })
-			} else {
-				console.log(`  ℹ️  No fixtures found (calendar-year league, skipping previous season check)`)
-			}
+			const previousYear = currentYear - 1
+			console.log(`  📅 No fixtures in season ${currentYear}, trying season ${previousYear}...`)
+			fixtures = await this.apiClient.getLeagueFixtures(league.id, previousYear, { from: fromDate, to: toDate })
 		}
 
 		console.log(`  ✅ API returned ${fixtures.length} fixtures for ${league.name}`)
