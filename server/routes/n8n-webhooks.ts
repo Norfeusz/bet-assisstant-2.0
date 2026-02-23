@@ -68,8 +68,10 @@ router.post('/import-matches', webhookAuth, async (req, res) => {
 		})
 
 		// Oblicz daty jeśli nie podano
+		// daysAhead=1 -> tylko JUTRO (nie dziś+jutro)
 		const today = new Date()
-		const startDate = dateFrom || today.toISOString().split('T')[0]
+		const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000)
+		const startDate = dateFrom || tomorrow.toISOString().split('T')[0]
 		const endDate = dateTo || new Date(today.getTime() + daysAhead * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
 		// Pobierz ligi

@@ -130,7 +130,7 @@ export class DataImporter {
 		console.log(`\n=== Importing matches from ${fromDate} to ${toDate} ===`)
 		console.log(`Leagues to process: ${enabledLeagues.length}`)
 		if (autoRetry) {
-			console.log(`🔄 Auto-retry: ENABLED (will wait 1 hour after rate limit)`)
+			console.log(`🔄 Auto-retry: ENABLED (will wait 15 minutes after rate limit)`)
 		}
 
 		try {
