@@ -165,19 +165,18 @@ export class DataImporter {
 						console.log(`✅ Imported ${this.progress.importedMatches} matches so far`)
 
 						if (autoRetry) {
-							console.log(`\n⏰ Auto-retry enabled. Waiting 1 hour before continuing...`)
+						console.log(`\n⏰ Auto-retry enabled. Waiting 15 minutes before continuing...`)
 
-							// Save current state as paused before waiting
-							const currentState = this.stateManager.loadState()
-							if (currentState) {
-								currentState.status = 'paused'
-								currentState.error = 'Rate limit - waiting for auto-retry'
-								this.stateManager.saveState(currentState)
-							}
+						// Save current state as paused before waiting
+						const currentState = this.stateManager.loadState()
+						if (currentState) {
+							currentState.status = 'paused'
+							currentState.error = 'Rate limit - waiting for auto-retry'
+							this.stateManager.saveState(currentState)
+						}
 
-							// Wait 1 hour
-							await this.waitWithCountdown(3600) // 3600 seconds = 1 hour
-
+						// Wait 15 minutes
+						await this.waitWithCountdown(900) // 900 seconds = 15 minutes
 							console.log(`\n🔄 Resuming import...`)
 
 							// Update state to in-progress before resuming
