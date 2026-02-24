@@ -175,24 +175,13 @@ router.post('/import-matches', webhookAuth, async (req, res) => {
 			},
 			rateLimit: {
 				remaining: rateLimitInfo.remaining,
-				limit: rateLimitInfo.limit,
-				resetAt: rateLimitInfo.resetTime
-			},
-			timing: {
-				durationSeconds: parseFloat(duration),
-				dateRange: { from: startDate, to: endDate }
-			}
+			limit: rateLimitInfo.limit
+		},
+		timing: {
+			durationSeconds: parseFloat(duration),
+			dateRange: { from: startDate, to: endDate }
 		}
-
-		console.log(`✅ Import completed in ${duration}s:`, result.stats)
-
-		// Opcjonalne powiadomienie email (jeśli skonfigurowane)
-		if (notifyEmail && process.env.SMTP_USER) {
-			// TODO: Implementacja wysyłki email przez nodemailer
-			console.log(`📧 Email notification scheduled to: ${notifyEmail}`)
-		}
-
-		res.json(result)
+	}
 
 	} catch (error: any) {
 		const duration = ((Date.now() - startTime) / 1000).toFixed(2)
@@ -230,7 +219,8 @@ interface UpdateResultsWebhookRequest {
 	dateTo?: string             
 	daysBack?: number           // Ile dni wstecz (np. 2)
 	leagueIds?: number[]        
-	notifyEmail?: string        
+	notifyEmail?: string
+	async?: boolean             // Jeśli true, tworzy job i zwraca jobId (default: true)
 }
 
 router.post('/update-results', webhookAuth, async (req, res) => {
@@ -243,14 +233,16 @@ router.post('/update-results', webhookAuth, async (req, res) => {
 			dateTo, 
 			daysBack = 2,
 			leagueIds,
-			notifyEmail 
+			notifyEmail,
+			async = true  // Default: async job (RECOMMENDED dla n8n)
 		} = req.body as UpdateResultsWebhookRequest
 
 		console.log('🔄 n8n webhook triggered: update-results', {
 			dateFrom: dateFrom || `-${daysBack} days`,
 			dateTo: dateTo || 'today',
 			leagueIds: leagueIds?.length || 'auto-detect from matches',
-			notifyEmail: notifyEmail || 'none'
+			notifyEmail: notifyEmail || 'none',
+			async
 		})
 
 		// Oblicz daty
@@ -293,14 +285,53 @@ router.post('/update-results', webhookAuth, async (req, res) => {
 			})
 		}
 
-		console.log(`🔄 Updating results for ${leaguesToUpdate.length} leagues from ${startDate} to ${endDate}`)
+		const leagueIdsToUpdate = leaguesToUpdate.map(l => l.id)
+
+		// TRYB ASYNCHRONICZNY: Tworzy job w bazie, Background Worker go przetworzy
+		if (async) {
+			console.log(`📊 Creating async update-results job: ${leagueIdsToUpdate.length} leagues from ${startDate} to ${endDate}`)
+
+			const job = await prisma.import_jobs.create({
+				data: {
+					leagues: leagueIdsToUpdate,
+					date_from: new Date(startDate),
+					date_to: new Date(endDate),
+					job_type: 'update_results',  // WAŻNE: Worker rozpozna to jako update zamiast import
+					total_matches: 0,
+					imported_matches: 0,
+					failed_matches: 0,
+					rate_limit_remaining: 0,
+					created_at: new Date()
+				}
+			})
+
+			console.log(`✅ Update job created with ID: ${job.id}`)
+
+			return res.json({
+				success: true,
+				async: true,
+				jobId: job.id,
+				message: 'Update-results job created successfully. Background worker will process it.',
+				checkStatusUrl: `/api/import-jobs/${job.id}`,
+				job: {
+					id: job.id,
+					status: job.status,
+					type: 'update_results',
+					leagues: leagueIdsToUpdate.length,
+					dateRange: { from: startDate, to: endDate }
+				}
+			})
+		}
+
+		// TRYB SYNCHRONICZNY (async=false): Update bezpośredni BEZ auto-retry
+		console.log(`🔄 Starting synchronous update-results: ${leaguesToUpdate.length} leagues from ${startDate} to ${endDate}`)
 
 		// Inicjalizuj importer
 		const apiClient = new ApiFootballClient(process.env.API_FOOTBALL_KEY!)
 		const leagueSelector = new LeagueSelector(apiClient)
 		importerInstance = new DataImporter(apiClient, leagueSelector)
 
-		// Aktualizuj wyniki
+		// Aktualizuj wyniki ZONDER auto-retry (żeby nie czekać w HTTP request)
 		await importerInstance.updateResults(startDate, endDate, false)
 
 		// Pobierz statystyki
@@ -319,8 +350,7 @@ router.post('/update-results', webhookAuth, async (req, res) => {
 			},
 			rateLimit: {
 				remaining: rateLimitInfo.remaining,
-				limit: rateLimitInfo.limit,
-				resetAt: rateLimitInfo.resetTime
+				limit: rateLimitInfo.limit
 			},
 			timing: {
 				durationSeconds: parseFloat(duration),

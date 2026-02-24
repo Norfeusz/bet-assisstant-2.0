@@ -285,7 +285,7 @@ Kliknij poza panelem aby zamknąć
 Method: Schedule Trigger
 
 Cron: 0 15 * * *
-(Codziennie o 15:00 America/New_York)
+(Codziennie o 15:00 America/New_York = 21:00 PL)
 ```
 
 ### Krok 3: Dodaj HTTP Request - Create Import Job
@@ -320,6 +320,155 @@ Save → Active
 
 ⚠️ UWAGA: Keep-Alive MUSI być aktywny przed aktywacją tego workflow!
 ```
+
+---
+
+## WORKFLOW 4: Daily Update Results (AUTOMATYCZNA AKTUALIZACJA)
+
+**Cel:** Automatyczna aktualizacja wyników meczów z wczoraj o 01:01 czasu POLSKIEGO (19:01 NY).
+
+### Krok 1: Stwórz workflow
+
+```bash
+1. "+ Add workflow"
+2. Nazwa: "2. Daily Update Results"
+3. Save
+```
+
+### Krok 2: Dodaj Schedule Trigger
+
+```bash
+1. Dodaj node: "Schedule Trigger"
+
+# Konfiguracja:
+
+Mode: Custom
+
+Value: 1 19 * * *
+
+⏰ To oznacza:
+   - 19:01 America/New_York (n8n timezone)
+   - = 01:01 Europe/Warsaw (czas polski)
+   - Codziennie w nocy
+```
+
+**Czemu 19:01 NY?**
+- Chcemy: 01:01 czasu polskiego (po zakończeniu wszystkich meczów)
+- n8n timezone: America/New_York (+6h różnicy)
+- 19:01 NY poprzedniego dnia = 01:01 PL następnego dnia ✓
+
+### Krok 3: Dodaj HTTP Request - Update Results
+
+```bash
+1. Przeciągnij z "Schedule Trigger" → dodaj "HTTP Request"
+
+# Konfiguracja:
+
+Method: POST
+
+URL: https://bet-assistant-backend.onrender.com/api/webhooks/n8n/update-results
+
+Authentication: None
+
+Headers:
+  x-n8n-api-key: <TWÓJ_KLUCZ>
+  Content-Type: application/json
+
+Body:
+  Body Content Type: JSON
+  
+  JSON:
+  {
+    "daysBack": 1,
+    "async": true
+  }
+
+Options → Timeout: 60000
+(60 sekund - dajemy czas na auto-detect lig i utworzenie jobu)
+
+Nazwa node: "Update Yesterday Results"
+```
+
+**Co robi `daysBack: 1` i `async: true`:**
+- Aktualizuje wyniki meczów z **wczoraj** (ostatnie 24h)
+- Auto-wykrywa ligi z meczami w tym okresie
+- Tworzy **async job** dla Background Workera (nie blokuje n8n request)
+- Worker sprawdza tylko nieukończone mecze (`is_finished = 'no'`)
+- Job wykonuje się w tle, n8n dostaje natychmiastowy response z `jobId`
+
+### Krok 4: (Opcjonalne) Dodaj HTTP Request - Check Job Status
+
+```bash
+1. Przeciągnij z "Update Yesterday Results" → dodaj "HTTP Request"
+
+# Konfiguracja:
+
+Method: GET
+
+URL: https://bet-assistant-backend.onrender.com/api/webhooks/n8n/import-jobs/status
+
+Authentication: None
+
+Headers:
+  x-n8n-api-key: <TWÓJ_KLUCZ>
+
+Options → Timeout: 15000
+
+Nazwa node: "Check Job Status"
+```
+
+**Opcjonalnie:** Dodaj Code node do formatowania statusu jobów.
+
+### Krok 5: (ZAMIAST Kroku 4) Albo dodaj Code node - Log Summary
+
+**Jeśli nie dodawałeś Kroku 4**, możesz dodać prosty logger:
+
+```bash
+1. Przeciągnij z "Update Yesterday Results" → dodaj "Code"
+
+# Konfiguracja:
+
+Mode: Run Once for All Items
+
+Language: JavaScript
+
+Code:
+```
+
+```javascript
+// Log async job creation
+const response = $input.first().json;
+
+const summary = {
+  timestamp: new Date().toISOString(),
+  job_id: response.jobId,
+  job_type: response.job?.type || 'update_results',
+  leagues_count: response.job?.leagues || 0,
+  date_range: response.job?.dateRange,
+  status: response.success ? "✅ Job Created" : "❌ Failed",
+  check_url: response.checkStatusUrl
+};
+
+console.log('Daily Update Results Job:', summary);
+
+return [{ json: summary }];
+```
+
+```bash
+Nazwa node: "Log Job Created"
+```
+
+### Krok 6: Aktywuj workflow
+
+```bash
+1. Kliknij "Save"
+
+2. Toggle "Inactive" → "Active" (zielony)
+
+3. Workflow będzie wykonywany CODZIENNIE o 01:01 czasu polskiego
+```
+
+**✅ WORKFLOW 4 GOTOWY** - Wyniki meczów będą automatycznie aktualizowane każdej nocy o 01:01 PL.
 
 ---
 
@@ -378,6 +527,49 @@ Oczekiwany output:
 4. Sprawdź Render logs - Background Worker powinien rozpocząć import
 ```
 
+### Test 4: Daily Update Results (manual test)
+
+```bash
+1. Otwórz "2. Daily Update Results"
+2. Kliknij "Test workflow"
+3. Czekaj 5-15 sekund (szybka odpowiedź - tworzy tylko job)
+4. Sprawdź output "Update Yesterday Results"
+
+Oczekiwany output:
+{
+  "success": true,
+  "async": true,
+  "jobId": 348,
+  "message": "Update-results job created successfully. Background worker will process it.",
+  "checkStatusUrl": "/api/import-jobs/348",
+  "job": {
+    "id": 348,
+    "status": "pending",
+    "type": "update_results",
+    "leagues": 8,
+    "dateRange": { "from": "2026-02-23", "to": "2026-02-24" }
+  }
+}
+
+5. Jeśli dodałeś "Log Job Created" node:
+   - Kliknij node → Zobacz formatted summary z jobId
+
+6. Sprawdź Render logs - Background Worker powinien rozpocząć update
+   - Zobacz: "🔄 Processing job #348: update_results"
+
+7. Po ~30-60 sekundach sprawdź status jobu:
+   - Manual Wake Worker → Test workflow → Check Pending Jobs
+   - Job #348 powinien mieć status "completed"
+```
+
+**Jeśli błąd "No matches found in date range":**
+- To NORMAL jeśli wczoraj nie było żadnych meczów w twoich ligach ✓
+- Próbuj ponownie w dniu gdy są mecze
+
+**Jeśli błąd "No unfinished matches found":**
+- To NORMAL jeśli wszystkie wczorajsze mecze już zakończone ✓
+- Update działa poprawnie, po prostu nie było czego aktualizować
+
 ---
 
 ## 📊 Monitorowanie
@@ -389,13 +581,20 @@ n8n → Executions (ikona zegara)
 
 Co sprawdzać:
 - Keep-Alive: Egzekucje co 10 minut w godzinach 10-16, 20-03 PL
-- Daily Import: Egzekucja codziennie o 15:00 NY (21:00 PL)
+- Daily Import: Egzekucja codziennie o 15:00 NY (21:00 PL) → tworzy async job
+- Daily Update Results: Egzekucja codziennie o 19:01 NY (01:01 PL) → tworzy async job
 - Wszystkie z zielonym znaczkiem ✓
+- Import i Update zwracają `jobId` w odpowiedzi
 
 Czerwony X = błąd:
 - Kliknij execution → Zobacz szczegóły błędu
 - Sprawdź node który się wysypał
 - Zobacz error message
+
+⚠️ WAŻNE: Daily Import i Daily Update Results tworzą tylko JOB - faktyczna praca dzieje się w Background Workerze.
+   - Workflow n8n: < 10 sekund (tworzy job, zwraca jobId)
+   - Worker execution: 30-300 sekund (faktyczny import/update)
+   - Sprawdzaj status jobów w Render logs lub przez Manual Wake Worker → Check Pending Jobs
 ```
 
 ### Render Logs
@@ -404,10 +603,22 @@ Czerwony X = błąd:
 Render Dashboard → bet-assistant-backend → Logs
 
 Co sprawdzać:
-- GET /health co 10 minut
+- GET /health co 10 minut (Keep-Alive)
 - PM2 log: Background Import Worker started
+- POST /import-matches 200 (Daily Import workflow)
+- POST /update-results 200 (Daily Update Results workflow)
+- 🔄 Processing job #XXX: new_matches (Worker rozpoczął import)
+- 🔄 Processing job #XXX: update_results (Worker rozpoczął update)
 - Import job #XXX progress logs
+- ✅ Job #XXX completed (Worker zakończył job)
 - Brak error messages
+
+⏱️ Typowy flow Daily Update Results:
+01:01 - n8n wywołuje POST /update-results → zwraca jobId 348 (< 5s)
+01:01 - Worker wykrywa job #348 w kolejce
+01:02 - Worker rozpoczyna: "🔄 Processing job #348: update_results"
+01:03 - Worker aktualizuje mecze z wczoraj
+01:04 - Worker kończy: "✅ Job #348 completed: 25 matches updated"
 ```
 
 ### Render Usage
@@ -576,9 +787,12 @@ Po zakończeniu konfiguracji sprawdź:
 ☐ Keep-Alive workflow stworzony i AKTYWNY
 ☐ Manual Wake Worker stworzony (test przeszedł)
 ☐ Daily Import (opcjonalnie) stworzony i aktywny
+☐ Daily Update Results (ZALECANE) stworzony i aktywny
 ☐ Manual Wake test: backend odpowiada < 10s
 ☐ Keep-Alive executions: pojawia się co 10 min
+☐ Daily Import/Update: zwracają jobId w response (async mode)
 ☐ Render logs: GET /health co 10 min widoczne
+☐ Render logs: Background Worker przetwarza joby co ~5 min
 ☐ Render usage: < 70% po tygodniu
 
 ☐ n8n działa 24/7 (VPS/Docker) LUB
@@ -619,11 +833,13 @@ Po zakończeniu konfiguracji sprawdź:
 - ✅ Jak dodać Schedule Trigger (cron syntax)
 - ✅ Jak konfigurować HTTP Request nodes
 - ✅ Jak dodawać Headers (API authentication)
+- ✅ Jak używać async job queue (webhooks zwracają jobId, worker przetwarza w tle)
 - ✅ Jak testować workflows przed aktywacją
-- ✅ Jak monitorować executions
+- ✅ Jak monitorować executions i job status
 - ✅ Jak debugować błędy 401, timeouts, cold starts
 - ✅ Jak zarządzać Render Free Tier usage (750h limit)
 - ✅ Jak połączyć n8n automatyzację z Background Worker
+- ✅ Różnica między async job (zwraca jobId) vs sync request (czeka na wynik)
 
 **Next steps:**
 1. Poeksperymentuj z innymi nodes (Webhook, Code, IF, Split)
