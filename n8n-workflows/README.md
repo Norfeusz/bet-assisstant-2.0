@@ -190,6 +190,7 @@ Jeśli używasz powiadomień/integracji:
 **Cel:** Codzienny import meczów na następny dzień o 10:00
 
 #### Krok 1: Import do n8n
+
 ```
 1. n8n UI → Workflows (menu lewe)
 2. Kliknij "Add workflow" → "Import from File"
@@ -199,6 +200,7 @@ Jeśli używasz powiadomień/integracji:
 ```
 
 #### Krok 2: Sprawdź Schedule Trigger
+
 ```
 1. Kliknij node "Schedule Trigger" (pierwszy node)
 2. Sprawdź Cron Expression: 0 10 * * * (10:00 każdego dnia)
@@ -206,6 +208,7 @@ Jeśli używasz powiadomień/integracji:
 ```
 
 **💡 Zmiana godziny importu:**
+
 ```
 0 6 * * *   → 06:00
 0 10 * * *  → 10:00 (domyślnie)
@@ -213,6 +216,7 @@ Jeśli używasz powiadomień/integracji:
 ```
 
 #### Krok 3: Sprawdź HTTP Request node
+
 ```
 1. Kliknij node "HTTP Request - Import Matches"
 2. Sprawdź URL: https://bet-assistant-backend.onrender.com/api/webhooks/n8n/import-matches
@@ -226,6 +230,7 @@ Jeśli używasz powiadomień/integracji:
 ```
 
 #### Krok 4: Aktywuj workflow
+
 ```
 1. Kliknij przełącznik "Inactive" → "Active" (góra ekranu)
 2. Powinieneś zobaczyć zielony status "Active"
@@ -233,6 +238,7 @@ Jeśli używasz powiadomień/integracji:
 ```
 
 #### Krok 5: Test (opcjonalnie)
+
 ```
 1. Kliknij "Test workflow" (zamiast czekać do 10:00)
 2. Workflow wykona się natychmiast
@@ -255,6 +261,7 @@ Jeśli używasz powiadomień/integracji:
 **⚠️ WAŻNE:** Bez tego workflow worker zaśnie podczas 15-min rate limit wait!
 
 #### Krok 1: Import do n8n
+
 ```
 1. n8n UI → Workflows
 2. "Add workflow" → "Import from File"
@@ -263,6 +270,7 @@ Jeśli używasz powiadomień/integracji:
 ```
 
 #### Krok 2: Sprawdź Schedule Trigger
+
 ```
 1. Kliknij node "Schedule Trigger"
 2. Sprawdź Cron Expression: */10 10-16,20-23,0-3 * * *
@@ -273,12 +281,14 @@ Jeśli używasz powiadomień/integracji:
 ```
 
 **Konwersja na czas polski (jeśli n8n timezone = America/New_York):**
+
 ```
 10:00-16:59 NY = 16:00-22:59 PL (7 godzin)
 20:00-03:59 NY = 02:00-09:59 PL (8 godzin)
 ```
 
 **💡 Koszt (Render Free Tier):**
+
 ```
 13h/dzień × 30 dni = 390h/miesiąc
 Limit Free Tier: 750h/miesiąc
@@ -286,6 +296,7 @@ Wykorzystanie: 52% (margines: 48%)
 ```
 
 #### Krok 3: Sprawdź HTTP Request node
+
 ```
 1. Kliknij node "Health Check"
 2. URL: https://bet-assistant-backend.onrender.com/api/webhooks/n8n/health
@@ -294,6 +305,7 @@ Wykorzystanie: 52% (margines: 48%)
 ```
 
 #### Krok 4: Aktywuj workflow
+
 ```
 1. Kliknij "Inactive" → "Active"
 2. Workflow zacznie działać automatycznie co 10 minut
@@ -301,6 +313,7 @@ Wykorzystanie: 52% (margines: 48%)
 ```
 
 #### Krok 5: Weryfikacja (za 15 minut)
+
 ```bash
 # Sprawdź czy backend przestał spać:
 curl -H "x-n8n-api-key: TWOJ_KEY" \
@@ -315,6 +328,7 @@ curl -H "x-n8n-api-key: TWOJ_KEY" \
 ```
 
 **Harmonogram wykonań (przykład dla timezone America/New_York):**
+
 ```
 10:00 NY → Wykonanie ✅
 10:10 NY → Wykonanie ✅
@@ -336,11 +350,13 @@ curl -H "x-n8n-api-key: TWOJ_KEY" \
 **Cel:** Ręczne obudzenie Render + sprawdzenie pending jobs
 
 **Kiedy używać:**
+
 - Dodałeś job ręcznie przez UI poza godzinami Keep-Alive
 - Testujesz system
 - Render zasnął i potrzebujesz go natychmiast obudzić
 
 #### Krok 1: Import do n8n
+
 ```
 1. n8n UI → Workflows
 2. "Add workflow" → "Import from File"
@@ -349,6 +365,7 @@ curl -H "x-n8n-api-key: TWOJ_KEY" \
 ```
 
 #### Krok 2: Sprawdź nodes (nie trzeba konfigurować)
+
 ```
 1. "When clicking 'Test workflow'" → Manual Trigger (automatyczny)
 2. "Wake Backend" → GET /health (timeout 60s)
@@ -357,12 +374,14 @@ curl -H "x-n8n-api-key: TWOJ_KEY" \
 ```
 
 #### Krok 3: NIE aktywuj
+
 ```
 ⚠️ To workflow z Manual Trigger - nie aktywuj go!
 Uruchamia się tylko gdy klikniesz "Test workflow"
 ```
 
 #### Krok 4: Użycie
+
 ```
 1. Otwórz workflow "Manual Wake Worker"
 2. Kliknij "Test workflow" (góra ekranu)
@@ -373,6 +392,7 @@ Uruchamia się tylko gdy klikniesz "Test workflow"
 ```
 
 **Przykładowy output:**
+
 ```json
 {
   "backend": {
@@ -409,6 +429,7 @@ Uruchamia się tylko gdy klikniesz "Test workflow"
 ```
 
 #### Krok 5: Interpretacja wyników
+
 ```
 jobs.pending > 0:
   → Worker znajdzie job w ciągu 5 minut i zacznie procesować
@@ -432,6 +453,7 @@ jobs.total = 0:
 ## 🧪 Testowanie konfiguracji
 
 ### Test 1: Backend Health (podstawowy)
+
 ```
 1. Otwórz workflow "Manual Wake Worker"
 2. Kliknij "Test workflow"
@@ -447,6 +469,7 @@ jobs.total = 0:
 ```
 
 **Błędy i rozwiązania:**
+
 ```
 ❌ 401 Unauthorized:
    → Zły API key
@@ -466,6 +489,7 @@ jobs.total = 0:
 ```
 
 ### Test 2: Daily Import (dry run)
+
 ```
 1. Otwórz workflow "Daily Import Matches"
 2. Kliknij "Test workflow"
@@ -480,6 +504,7 @@ jobs.total = 0:
 ```
 
 **Co sprawdzić po teście:**
+
 ```bash
 # Sprawdź czy job został utworzony w bazie:
 SELECT id, status, job_type, leagues, date_from, date_to, created_at
@@ -491,6 +516,7 @@ WHERE id = 348;
 ```
 
 ### Test 3: Keep-Alive (po aktywacji, czekaj 15 min)
+
 ```
 1. Aktywuj workflow "Keep-Alive - Render Worker"
 2. Poczekaj 10-15 minut
@@ -508,6 +534,7 @@ WHERE id = 348;
 ### Problem: Workflow nie wykonuje się automatycznie
 
 **Diagnoza:**
+
 ```
 1. Sprawdź czy workflow jest Active (zielony status u góry)
 2. Kliknij Schedule Trigger node → sprawdź Cron Expression
@@ -516,6 +543,7 @@ WHERE id = 348;
 ```
 
 **Rozwiązanie:**
+
 ```
 1. Upewnij się że przełącznik Active jest włączony (zielony)
 2. Sprawdź n8n logs (jeśli self-hosted):
@@ -530,6 +558,7 @@ WHERE id = 348;
 **Przyczyna:** Nie dodano Environment Variable w n8n
 
 **Rozwiązanie:**
+
 ```
 1. n8n → Settings → Variables
 2. Add Variable:
@@ -544,6 +573,7 @@ WHERE id = 348;
 **Przyczyna:** Zły cron expression
 
 **Rozwiązanie:**
+
 ```
 1. Otwórz workflow "Keep-Alive"
 2. Kliknij Schedule Trigger
@@ -557,6 +587,7 @@ WHERE id = 348;
 **Przyczyna:** Render cold start lub backend nie działa
 
 **Rozwiązanie:**
+
 ```
 1. Sprawdź Render Dashboard → bet-assistant-backend → Logs
 2. Czy widzisz: "Server started on port 3000"?

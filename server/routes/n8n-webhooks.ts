@@ -538,7 +538,7 @@ router.get('/import-jobs/status', webhookAuth, async (req, res) => {
 				id, 
 				status,
 				job_type,
-				array_length(leagues, 1) as league_count,
+				jsonb_array_length(leagues) as league_count,
 				date_from::text,
 				date_to::text,
 				imported_matches,
