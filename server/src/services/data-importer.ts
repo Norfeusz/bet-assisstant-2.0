@@ -739,6 +739,7 @@ export class DataImporter {
 			where: { fixture_id: fixtureId },
 			select: { 
 				fixture_id: true,
+				match_date: true,
 				standing_home: true,
 				standing_away: true,
 				home_odds: true,
@@ -747,11 +748,23 @@ export class DataImporter {
 			}
 		})
 
-		// If match exists and has all key data (standings + odds), skip
+		// Check if match date changed (reschedule detection)
+		const apiMatchDate = new Date(fixture.fixture.date)
+		const dbMatchDate = existingMatch?.match_date ? new Date(existingMatch.match_date) : null
+		
+		const dateChanged = dbMatchDate && 
+			apiMatchDate.toISOString().split('T')[0] !== dbMatchDate.toISOString().split('T')[0]
+
+		if (dateChanged) {
+			console.log(`  📅 Date reschedule detected: ${dbMatchDate.toISOString().split('T')[0]} → ${apiMatchDate.toISOString().split('T')[0]} (${homeTeam} vs ${awayTeam})`)
+		}
+
+		// If match exists and has all key data (standings + odds) AND date hasn't changed, skip
 		const hasCompleteData = existingMatch && 
 			existingMatch.standing_home !== null && 
 			existingMatch.standing_away !== null &&
-			existingMatch.home_odds !== null
+			existingMatch.home_odds !== null &&
+			!dateChanged  // Don't skip if date changed - need to update!
 		
 		if (hasCompleteData) {
 			console.log('  Already complete (skipped): ' + homeTeam + ' vs ' + awayTeam)
@@ -760,9 +773,13 @@ export class DataImporter {
 			return
 		}
 
-		// If match exists but is incomplete, we'll update it
-		if (existingMatch && !hasCompleteData) {
-			console.log('  Updating incomplete match: ' + homeTeam + ' vs ' + awayTeam)
+		// If match exists but is incomplete OR date changed, we'll update it
+		if (existingMatch && (!hasCompleteData || dateChanged)) {
+			if (dateChanged) {
+				console.log('  📆 Updating match (reschedule): ' + homeTeam + ' vs ' + awayTeam)
+			} else {
+				console.log('  Updating incomplete match: ' + homeTeam + ' vs ' + awayTeam)
+			}
 		}
 			
 		// Fetch full data (statistics + odds)

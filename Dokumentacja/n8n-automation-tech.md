@@ -134,39 +134,42 @@ webhookAuth Middleware
 **Odpowiedzialność:** Obsługa wszystkich webhooków z n8n
 
 **Struktura:**
-```typescript
-import express from 'express'
-import { PrismaClient } from '@prisma/client'
-import { DataImporter } from '../src/services/data-importer.js'
-import { ApiFootballClient } from '../src/services/api-football-client.js'
-import { LeagueSelector } from '../src/services/league-selector.js'
 
-const router = express.Router()
-const prisma = new PrismaClient()
+```typescript
+import express from "express";
+import { PrismaClient } from "@prisma/client";
+import { DataImporter } from "../src/services/data-importer.js";
+import { ApiFootballClient } from "../src/services/api-football-client.js";
+import { LeagueSelector } from "../src/services/league-selector.js";
+
+const router = express.Router();
+const prisma = new PrismaClient();
 
 // Middleware autoryzacji (WSZYSTKIE endpointy)
 const webhookAuth = (req, res, next) => {
-  const apiKey = req.headers['x-n8n-api-key'] || 
-                 req.headers['authorization']?.replace('Bearer ', '')
-  const validKey = process.env.N8N_WEBHOOK_KEY
-  
-  if (!validKey) {
-    return res.status(500).json({ error: 'Webhook not configured' })
-  }
-  
-  if (!apiKey || apiKey !== validKey) {
-    return res.status(401).json({ error: 'Unauthorized' })
-  }
-  
-  next()
-}
+  const apiKey =
+    req.headers["x-n8n-api-key"] ||
+    req.headers["authorization"]?.replace("Bearer ", "");
+  const validKey = process.env.N8N_WEBHOOK_KEY;
 
-router.use(webhookAuth)
+  if (!validKey) {
+    return res.status(500).json({ error: "Webhook not configured" });
+  }
+
+  if (!apiKey || apiKey !== validKey) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  next();
+};
+
+router.use(webhookAuth);
 
 // ... endpoints
 ```
 
 **Endpointy:**
+
 1. `POST /webhooks/n8n/import-matches` - Import nowych meczów (async job creation)
 2. `POST /webhooks/n8n/update-results` - Aktualizacja wyników
 3. `POST /webhooks/n8n/backup-database` - Backup bazy
@@ -180,32 +183,32 @@ router.use(webhookAuth)
 
 ```typescript
 // Inicjalizacja (w każdym endpoint)
-const apiClient = new ApiFootballClient(process.env.API_FOOTBALL_KEY!)
-const leagueSelector = new LeagueSelector(apiClient)
-const importer = new DataImporter(apiClient, leagueSelector)
+const apiClient = new ApiFootballClient(process.env.API_FOOTBALL_KEY!);
+const leagueSelector = new LeagueSelector(apiClient);
+const importer = new DataImporter(apiClient, leagueSelector);
 
 // Użycie
-await importer.importDateRange(startDate, endDate, false, false)
+await importer.importDateRange(startDate, endDate, false, false);
 // lub
-await importer.updateResults(startDate, endDate, false)
+await importer.updateResults(startDate, endDate, false);
 
 // Statystyki
-const progress = importer.getProgress()
-const rateLimitInfo = importer.getRateLimitInfo()
+const progress = importer.getProgress();
+const rateLimitInfo = importer.getRateLimitInfo();
 ```
 
 **Różnice: Async vs Synchronous Mode:**
 
-| Aspekt | Async Mode (default) | Synchronous Mode (async=false) |
-|--------|---------------------|--------------------------------|
-| Webhook response | Natychmiastowa (job created) | Po zakończeniu importu |
-| Timeout | ~1s (tylko zapis do DB) | 5-10 min (pełny import) |
-| Worker | Background worker procesuje | Webhook procesuje bezpośrednio |
-| Kolejka | Tak - import_jobs table | Nie - direct execution |
-| Resume po rate limit | Tak - auto retry po 15 min | Nie - kończy z błędem |
-| Status tracking | `/api/import-jobs/{jobId}` | W response webhookaola |
-| n8n timeout risk | Brak (szybka odpowiedź) | Wysokie (długi import) |
-| Zalecenie | **PRODUKCJA** | Tylko testy/debug |
+| Aspekt               | Async Mode (default)         | Synchronous Mode (async=false) |
+| -------------------- | ---------------------------- | ------------------------------ |
+| Webhook response     | Natychmiastowa (job created) | Po zakończeniu importu         |
+| Timeout              | ~1s (tylko zapis do DB)      | 5-10 min (pełny import)        |
+| Worker               | Background worker procesuje  | Webhook procesuje bezpośrednio |
+| Kolejka              | Tak - import_jobs table      | Nie - direct execution         |
+| Resume po rate limit | Tak - auto retry po 15 min   | Nie - kończy z błędem          |
+| Status tracking      | `/api/import-jobs/{jobId}`   | W response webhookaola         |
+| n8n timeout risk     | Brak (szybka odpowiedź)      | Wysokie (długi import)         |
+| Zalecenie            | **PRODUKCJA**                | Tylko testy/debug              |
 
 **UWAGA:** W produkcji **zawsze używaj async=true** (domyślnie). Synchroniczny mode nie radzi sobie z rate limitami i może przekroczyć timeout n8n (180s).
 
@@ -214,6 +217,7 @@ const rateLimitInfo = importer.getRateLimitInfo()
 **Klasa:** `BackgroundImportWorker` (`server/background-import-worker.ts`)
 
 **Architektura:**
+
 - Uruchamia się jako osobny proces (via PM2)
 - Polling bazy co 5 minut
 - Procesuje jedno zadanie naraz (lock mechanism)
@@ -221,22 +225,27 @@ const rateLimitInfo = importer.getRateLimitInfo()
 - Prioritet: rate_limited jobs > new jobs
 
 **Kod inicjalizacji:**
+
 ```typescript
 // Startup
-const worker = new BackgroundImportWorker()
-worker.start()
+const worker = new BackgroundImportWorker();
+worker.start();
 
 // Polling loop
-setInterval(() => {
-  worker.checkAndProcessJobs()
-}, 5 * 60 * 1000)  // Co 5 minut
+setInterval(
+  () => {
+    worker.checkAndProcessJobs();
+  },
+  5 * 60 * 1000,
+); // Co 5 minut
 ```
 
 **Logika selekcji zadań (SQL):**
+
 ```sql
 -- Priority 1: Rate limited jobs ready to resume
-SELECT * FROM import_jobs 
-WHERE status = 'rate_limited' 
+SELECT * FROM import_jobs
+WHERE status = 'rate_limited'
   AND rate_limit_reset_at < NOW()
 ORDER BY created_at ASC
 LIMIT 1
@@ -249,6 +258,7 @@ LIMIT 1
 ```
 
 **Single Job Lock:**
+
 ```typescript
 private processingJobId: number | null = null
 
@@ -257,10 +267,10 @@ async checkAndProcessJobs() {
     console.log('Already processing job, skipping...')
     return  // Jeden job na raz
   }
-  
+
   const job = await this.findJobToProcess()
   if (!job) return
-  
+
   this.processingJobId = job.id
   try {
     await this.processJob(job)
@@ -273,21 +283,23 @@ async checkAndProcessJobs() {
 ```
 
 **Rate Limit Handling:**
+
 ```typescript
 // Gdy DataImporter zwróci rate limit:
 await prisma.import_jobs.update({
   where: { id: job.id },
   data: {
-    status: 'rate_limited',
-    rate_limit_reset_at: new Date(Date.now() + 15 * 60 * 1000)
-  }
-})
+    status: "rate_limited",
+    rate_limit_reset_at: new Date(Date.now() + 15 * 60 * 1000),
+  },
+});
 
 // Worker automatycznie znajdzie job po 15 minutach
 // i wznowi od miejsca przerwania
 ```
 
 **PM2 Configuration:**
+
 ```javascript
 // ecosystem.config.cjs
 {
@@ -303,6 +315,7 @@ await prisma.import_jobs.update({
 ```
 
 **Monitoring:**
+
 ```bash
 # Na Render - zobacz logi workera
 pm2 logs background-worker
@@ -316,14 +329,15 @@ npm run worker
 **Klasa:** `DatabaseBackup` (`server/scripts/backup-database.ts`)
 
 ```typescript
-const backup = new DatabaseBackup()
-await backup.createBackup({ 
-  pushToGit: false,      // n8n zarządza Git
-  skipIfNoChanges: true 
-})
+const backup = new DatabaseBackup();
+await backup.createBackup({
+  pushToGit: false, // n8n zarządza Git
+  skipIfNoChanges: true,
+});
 ```
 
 **Mechanizm:**
+
 1. Używa `pg_dump` do eksportu bazy
 2. Tworzy max 10 backupów (nadpisuje najstarszy)
 3. Zapisuje w `backups/database-backup-{1-10}.sql`
@@ -332,6 +346,7 @@ await backup.createBackup({
 ### 5. Monitoring
 
 **Health Check endpoint:**
+
 ```typescript
 GET /api/webhooks/n8n/health
 
@@ -351,6 +366,7 @@ GET /api/webhooks/n8n/health
 ```
 
 **Status endpoint:**
+
 ```typescript
 GET /api/webhooks/n8n/status
 
@@ -425,8 +441,8 @@ GET /api/webhooks/n8n/status
    │
 7. Background Worker: Polling loop (co 5 min)
    │
-   ├─ SQL: SELECT * FROM import_jobs 
-   │       WHERE status = 'in_queue' 
+   ├─ SQL: SELECT * FROM import_jobs
+   │       WHERE status = 'in_queue'
    │       ORDER BY created_at ASC LIMIT 1
    │
    ├─ Znaleziono: Job #345
@@ -447,7 +463,7 @@ GET /api/webhooks/n8n/status
    │  │  └─ Sprawdza rate limit
    │  │
    │  ├─ Rate limit hit (300/300 requests):
-   │  │  ├─ UPDATE import_jobs SET 
+   │  │  ├─ UPDATE import_jobs SET
    │  │  │    status='rate_limited',
    │  │  │    rate_limit_reset_at=NOW() + 15 min
    │  │  └─ RETURN (kończy processing)
@@ -459,7 +475,7 @@ GET /api/webhooks/n8n/status
 9. Worker: Po 15 minutach (rate_limit_reset_at < NOW())
    │
    ├─ SQL: SELECT * FROM import_jobs
-   │       WHERE status='rate_limited' 
+   │       WHERE status='rate_limited'
    │         AND rate_limit_reset_at < NOW()
    │       ORDER BY created_at ASC LIMIT 1
    │
@@ -474,7 +490,7 @@ GET /api/webhooks/n8n/status
    │
    ├─ Dokończenie pozostałych lig
    │
-   ├─ UPDATE import_jobs SET 
+   ├─ UPDATE import_jobs SET
    │      status='completed',
    │      completed_at=NOW()
    │
@@ -483,6 +499,7 @@ GET /api/webhooks/n8n/status
 ```
 
 **Kluczowe różnice vs stary flow:**
+
 - ✅ Webhook zwraca natychmiast (brak timeoutów)
 - ✅ Auto-retry na rate limit (15 min wait)
 - ✅ Progress tracking w bazie
@@ -520,6 +537,7 @@ GET /api/webhooks/n8n/status
 ### 1. Autoryzacja API Key
 
 **Generowanie:**
+
 ```powershell
 # Windows PowerShell
 $bytes = New-Object byte[] 32
@@ -528,18 +546,21 @@ $bytes = New-Object byte[] 32
 ```
 
 **Przechowywanie:**
+
 - Backend: `.env` (N8N_WEBHOOK_KEY)
 - n8n: Environment Variables
 - **NIGDY** w Git (`.env` w .gitignore)
 
 **Walidacja:**
+
 ```typescript
-const apiKey = req.headers['x-n8n-api-key'] || 
-               req.headers['authorization']?.replace('Bearer ', '')
-const validKey = process.env.N8N_WEBHOOK_KEY
+const apiKey =
+  req.headers["x-n8n-api-key"] ||
+  req.headers["authorization"]?.replace("Bearer ", "");
+const validKey = process.env.N8N_WEBHOOK_KEY;
 
 if (!apiKey || apiKey !== validKey) {
-  return res.status(401).json({ error: 'Unauthorized' })
+  return res.status(401).json({ error: "Unauthorized" });
 }
 ```
 
@@ -548,32 +569,36 @@ if (!apiKey || apiKey !== validKey) {
 **Podejście:** n8n queue mode (wbudowane)
 
 **Konfiguracja w n8n:**
+
 ```yaml
 # n8n settings
-N8N_CONCURRENCY_PRODUCTION_LIMIT: 1  # Max 1 workflow jednocześnie
-N8N_EXECUTIONS_PROCESS: main          # Nie spawn new process
+N8N_CONCURRENCY_PRODUCTION_LIMIT: 1 # Max 1 workflow jednocześnie
+N8N_EXECUTIONS_PROCESS: main # Nie spawn new process
 ```
 
 **Monitorowanie:**
+
 - Każdy endpoint zwraca `rateLimit` w response
 - Monitoring workflow sprawdza co 15 min
 
 ### 3. HTTPS w produkcji
 
 **Wymagania:**
+
 - n8n za reverse proxy (nginx/Caddy)
 - SSL certificate (Let's Encrypt)
 - Backend również za SSL
 
 **Nginx example:**
+
 ```nginx
 server {
   listen 443 ssl;
   server_name n8n.yourdomain.com;
-  
+
   ssl_certificate /path/to/cert.pem;
   ssl_certificate_key /path/to/key.pem;
-  
+
   location / {
     proxy_pass http://localhost:5678;
     proxy_set_header X-Real-IP $remote_addr;
@@ -588,12 +613,14 @@ server {
 ### 1. Timeout configuration
 
 **Zalecane timeouty:**
+
 - Import matches: 300s (5 min)
 - Update results: 180s (3 min)
 - Backup database: 120s (2 min)
 - Health/status: 10s
 
 **W n8n:**
+
 ```
 HTTP Request node → Options → Timeout (ms)
 ```
@@ -601,12 +628,14 @@ HTTP Request node → Options → Timeout (ms)
 ### 2. Limit meczów/lig
 
 **Optymalne wartości (FREE API plan: 300 req/day):**
+
 - Wszystkie ligi enabled (159 lig w produkcji)
 - Zakres dat: 1 dzień (daysAhead: 1)
 - Worker auto-retry po rate limit (15 min wait)
 - Import dzieli się na chunki po 300 requests
 
 **PREMIUM plan (7500 req/day):**
+
 - Wszystkie ligi bez limitów
 - Zakres dat: 7-14 dni
 - Aktualizacje: co 2h
@@ -616,6 +645,7 @@ HTTP Request node → Options → Timeout (ms)
 ### 3. Pamięć i resources
 
 **Backend:**
+
 ```json
 // package.json
 "scripts": {
@@ -624,12 +654,13 @@ HTTP Request node → Options → Timeout (ms)
 ```
 
 **n8n (Docker):**
+
 ```yaml
 services:
   n8n:
     image: n8nio/n8n
     environment:
-      - N8N_PAYLOAD_SIZE_MAX=128  # MB
+      - N8N_PAYLOAD_SIZE_MAX=128 # MB
     deploy:
       resources:
         limits:
@@ -639,6 +670,7 @@ services:
 ### 4. Database indexy
 
 **Sprawdź indeksy:**
+
 ```sql
 -- Jeśli wolne queries
 CREATE INDEX idx_matches_date ON matches(match_date);
@@ -671,6 +703,7 @@ n8n start
 ### Production - Render (Current Setup)
 
 **Architektura:**
+
 - **Web Service:** Backend + Worker w jednym (PM2)
 - **PostgreSQL:** Zewnętrzna baza (Render PostgreSQL)
 - **Free Tier:** $0/month (500h/month uptime)
@@ -701,32 +734,32 @@ PORT=3000
 module.exports = {
   apps: [
     {
-      name: 'backend-server',
-      script: 'npx',
-      args: 'tsx server/league-config-server.ts',
+      name: "backend-server",
+      script: "npx",
+      args: "tsx server/league-config-server.ts",
       env: {
-        NODE_ENV: 'production',
-        PORT: process.env.PORT || 3000
+        NODE_ENV: "production",
+        PORT: process.env.PORT || 3000,
       },
       instances: 1,
       autorestart: true,
       max_restarts: 10,
-      min_uptime: '10s'
+      min_uptime: "10s",
     },
     {
-      name: 'background-worker',
-      script: 'npx',
-      args: 'tsx server/background-import-worker.ts',
+      name: "background-worker",
+      script: "npx",
+      args: "tsx server/background-import-worker.ts",
       env: {
-        NODE_ENV: 'production'
+        NODE_ENV: "production",
       },
       instances: 1,
       autorestart: true,
       max_restarts: 10,
-      restart_delay: 5000
-    }
-  ]
-}
+      restart_delay: 5000,
+    },
+  ],
+};
 ```
 
 ```json
@@ -776,10 +809,12 @@ git push origin main
 ⚠️ **UWAGA:** Free tier usypia po 15 minutach braku aktywności
 
 **Cold Start Behavior:**
+
 - Pierwsze żądanie: 20-40 sekund (backend budzi się)
 - Kolejne żądania: < 200ms (normalnie)
 
 **Rozwiązanie - Keep-Alive Workflow:**
+
 ```
 n8n Schedule Trigger: */10 * * * * (co 10 min)
 HTTP Request: GET /api/webhooks/n8n/health
@@ -803,8 +838,9 @@ curl https://bet-assistant-backend.onrender.com/api/webhooks/n8n/status \
 ### Production - Docker (Alternative)
 
 **1. n8n (Docker Compose):**
+
 ```yaml
-version: '3.8'
+version: "3.8"
 
 services:
   n8n:
@@ -833,6 +869,7 @@ volumes:
 **3. Environment Variables:**
 
 Backend (`.env`):
+
 ```env
 N8N_WEBHOOK_KEY=<same-as-n8n>
 DATABASE_URL=postgresql://betassistant:***@dpg-***.frankfurt-postgres.render.com/betassistant
@@ -841,6 +878,7 @@ NODE_ENV=production
 ```
 
 n8n (UI Settings):
+
 ```
 BET_ASSISTANT_API_URL=https://bet-assistant-backend.onrender.com
 BET_ASSISTANT_WEBHOOK_KEY=<same-as-backend>
@@ -852,6 +890,7 @@ NOTIFICATION_EMAIL=alerts@yourcompany.com
 ⚠️ **PROBLEM:** n8n Schedule Trigger domyślnie używa timezone serwera (często America/New_York)
 
 **Przykład:**
+
 ```
 Cron: 0 4 * * *  (04:00)
 Timezone n8n: America/New_York
@@ -859,11 +898,13 @@ Timezone n8n: America/New_York
 ```
 
 **Kalkulacja:**
+
 - America/New_York to UTC-5 (zima) lub UTC-4 (lato)
 - Europe/Warsaw to UTC+1 (zima) lub UTC+2 (lato)
 - Różnica: 6 godzin (zima) lub 5-6 godzin (lato)
 
 **Rozwiązanie 1 - Offset w cron:**
+
 ```
 Cel: Daily import o 10:00 polskiego czasu
 Timezone n8n: America/New_York
@@ -873,17 +914,19 @@ Lato: 10:00 Warsaw = 04:00 New York → Cron: 0 4 * * * (to samo!)
 ```
 
 **Rozwiązanie 2 - Zmiana timezone n8n (Docker):**
+
 ```yaml
 # docker-compose.yml
 services:
   n8n:
     environment:
       - GENERIC_TIMEZONE=Europe/Warsaw
-      
+
 # Wtedy cron 0 10 * * * = 10:00 polskiego czasu
 ```
 
 **Testowanie:**
+
 ```
 # Test schedule (13:15 polskiego)
 Timezone: America/New_York
@@ -898,35 +941,33 @@ Cron: 0 4 * * *  (04:00 NY = 10:00 Warsaw)
 ## 📝 Changelog systemu
 
 ### v2.0 (24 lutego 2026) - PRODUCTION DEPLOYMENT
+
 - ✅ **Async Job Queue Implementation**
   - Webhook tworzy job w bazie (natychmiastowa odpowiedź)
   - Background worker procesuje kolejkę co 5 min
   - Auto-retry po rate limit (15 min wait)
   - Progress tracking w import_jobs table
-  
 - ✅ **Render Deployment (Free Tier)**
   - PM2 multi-process: backend + worker w jednym serwisie
   - PostgreSQL na Render (Frankfurt, SSL required)
   - Migracja wszystkich tabel (28,270 matches)
   - Cold start handling (180s timeout + retry)
-  
 - ✅ **Rate Limit Auto-Resume**
   - Worker automatycznie wznawia po 15 minutach
   - Priority queue: rate_limited > in_queue
   - Single job concurrency (lock mechanism)
   - FIFO ordering within priority
-  
 - ✅ **Timezone Configuration**
   - Dokumentacja offset America/New_York → Europe/Warsaw
   - Schedule trigger: `0 4 * * *` = 10:00 polskiego
   - Test trigger: `15 7 * * *` = 13:15 polskiego
-  
 - ⚠️ **Breaking Changes**
   - Domyślnie `async=true` (async job queue)
   - Synchronous mode tylko dla testów (`async=false`)
   - Webhook nie czeka na zakończenie importu
 
 ### v1.0 (19 lutego 2026)
+
 - ✅ Inicjalna implementacja n8n webhooks
 - ✅ 4 workflows: import, update, backup, monitoring
 - ✅ Pełna autoryzacja API key
@@ -934,6 +975,7 @@ Cron: 0 4 * * *  (04:00 NY = 10:00 Warsaw)
 - ✅ Dokumentacja kompletna
 
 ### Planned (v2.1)
+
 - ⏳ Keep-Alive workflow (prevent Render sleep)
 - ⏳ Job status monitoring endpoint
 - ⏳ Email notifications on job completion
@@ -946,6 +988,7 @@ Cron: 0 4 * * *  (04:00 NY = 10:00 Warsaw)
 ### Testowanie lokalnie
 
 **1. Test autoryzacji:**
+
 ```bash
 # Bez klucza - powinna być 401
 curl http://localhost:3000/api/webhooks/n8n/health
@@ -956,6 +999,7 @@ curl -H "x-n8n-api-key: your-key" \
 ```
 
 **2. Test async import (PRODUKCJA):**
+
 ```bash
 # Tworzy job w bazie, zwraca natychmiast
 curl -X POST \
@@ -975,6 +1019,7 @@ curl -X POST \
 ```
 
 **3. Test synchronous import (DEBUG ONLY):**
+
 ```bash
 # UWAGA: Czeka na zakończenie, może timeout!
 curl -X POST \
@@ -993,6 +1038,7 @@ curl -X POST \
 ```
 
 **4. Sprawdzenie statusu job:**
+
 ```bash
 # Po otrzymaniu jobId z async import
 curl -H "x-n8n-api-key: your-key" \
@@ -1010,6 +1056,7 @@ curl -H "x-n8n-api-key: your-key" \
 ```
 
 **5. Test na Render (Production):**
+
 ```bash
 # UWAGA: Pierwsze żądanie może trwać 20-40s (cold start)
 curl -X POST \
@@ -1022,6 +1069,7 @@ curl -X POST \
 ```
 
 **6. Test n8n workflow:**
+
 - W n8n UI: Workflow → Execute Workflow
 - Sprawdź execution logs
 - Verify response w każdym node
@@ -1031,23 +1079,22 @@ curl -X POST \
 
 ```typescript
 // tests/webhooks.test.ts
-import request from 'supertest'
-import app from '../server/league-config-server'
+import request from "supertest";
+import app from "../server/league-config-server";
 
-describe('n8n Webhooks', () => {
-  it('should reject unauthorized requests', async () => {
+describe("n8n Webhooks", () => {
+  it("should reject unauthorized requests", async () => {
+    const res = await request(app).get("/api/webhooks/n8n/health");
+    expect(res.status).toBe(401);
+  });
+
+  it("should accept valid API key", async () => {
     const res = await request(app)
-      .get('/api/webhooks/n8n/health')
-    expect(res.status).toBe(401)
-  })
-  
-  it('should accept valid API key', async () => {
-    const res = await request(app)
-      .get('/api/webhooks/n8n/health')
-      .set('x-n8n-api-key', process.env.N8N_WEBHOOK_KEY)
-    expect(res.status).toBe(200)
-  })
-})
+      .get("/api/webhooks/n8n/health")
+      .set("x-n8n-api-key", process.env.N8N_WEBHOOK_KEY);
+    expect(res.status).toBe(200);
+  });
+});
 ```
 
 ---
@@ -1057,6 +1104,7 @@ describe('n8n Webhooks', () => {
 ### 1. "The connection was aborted" - Render Cold Start
 
 **Problem:**
+
 ```
 n8n error: The connection was aborted, perhaps the server is offline
 ```
@@ -1064,6 +1112,7 @@ n8n error: The connection was aborted, perhaps the server is offline
 **Przyczyna:** Render Free Tier usypia po 15 minutach braku aktywności. Pierwsze żądanie budzi serwis (20-40s).
 
 **Rozwiązanie:**
+
 ```yaml
 # n8n HTTP Request node
 Timeout: 180000 (3 minuty)
@@ -1073,6 +1122,7 @@ Wait Between Retries: 30000 (30s)
 ```
 
 **Opcjonalnie - Keep-Alive Workflow:**
+
 ```
 Schedule: */10 * * * * (co 10 minut)
 HTTP Request: GET /api/webhooks/n8n/health
@@ -1082,11 +1132,13 @@ HTTP Request: GET /api/webhooks/n8n/health
 ### 2. "Unauthorized" - API Key Issue
 
 **Problem:**
+
 ```json
 { "error": "Unauthorized" }
 ```
 
 **Diagnoza:**
+
 ```bash
 # Sprawdź czy klucz jest ustawiony na backendzie
 echo $N8N_WEBHOOK_KEY  # Lokalnie (PowerShell)
@@ -1097,6 +1149,7 @@ echo $N8N_WEBHOOK_KEY  # Lokalnie (PowerShell)
 ```
 
 **Rozwiązanie:**
+
 - Backend `.env`: `N8N_WEBHOOK_KEY=abc123`
 - n8n workflow: Header `x-n8n-api-key: abc123`
 - Upewnij się, że klucze są identyczne!
@@ -1105,15 +1158,17 @@ echo $N8N_WEBHOOK_KEY  # Lokalnie (PowerShell)
 
 **Problem:**
 Worker polling loop działa, ale nie znajduje zadań:
+
 ```
 [background-worker] No jobs to process
 ```
 
 **Diagnoza:**
+
 ```sql
 -- Sprawdź status zadań w bazie
-SELECT id, status, created_at, rate_limit_reset_at 
-FROM import_jobs 
+SELECT id, status, created_at, rate_limit_reset_at
+FROM import_jobs
 WHERE status IN ('in_queue', 'rate_limited')
 ORDER BY created_at DESC;
 
@@ -1125,6 +1180,7 @@ ORDER BY created_at DESC;
 ```
 
 **Rozwiązanie:**
+
 ```bash
 # Local worker
 # Upewnij się że .env ma DATABASE_URL do Render:
@@ -1137,6 +1193,7 @@ DATABASE_URL=postgresql://betassistant:***@dpg-***.frankfurt-postgres.render.com
 ### 4. Rate Limit - "Too many requests"
 
 **Problem:**
+
 ```json
 {
   "success": false,
@@ -1146,20 +1203,23 @@ DATABASE_URL=postgresql://betassistant:***@dpg-***.frankfurt-postgres.render.com
 ```
 
 **Wyjaśnienie:**
+
 - API Football Free: 300 requests/day
 - Worker automatycznie czeka 15 min i wznawia
 
 **Weryfikacja:**
+
 ```sql
-SELECT id, status, imported_matches, total_matches, 
+SELECT id, status, imported_matches, total_matches,
        rate_limit_reset_at
-FROM import_jobs 
+FROM import_jobs
 WHERE id = 345;
 
 -- status='rate_limited' → Worker wznowi po upłynięciu rate_limit_reset_at
 ```
 
 **Rozwiązanie:**
+
 - ✅ **Async mode:** Worker automatycznie wznowi (ZALECANE)
 - ❌ **Sync mode:** Zwróci błąd do n8n (NIE UŻYWAĆ w produkcji)
 
@@ -1169,6 +1229,7 @@ WHERE id = 345;
 Cron `0 10 * * *` uruchamia się o 16:00 zamiast 10:00 polskiego czasu.
 
 **Diagnoza:**
+
 ```bash
 # Sprawdź timezone n8n
 # W Docker: GENERIC_TIMEZONE env variable
@@ -1176,6 +1237,7 @@ Cron `0 10 * * *` uruchamia się o 16:00 zamiast 10:00 polskiego czasu.
 ```
 
 **Rozwiązanie 1 - Offset:**
+
 ```
 Cel: 10:00 Europe/Warsaw
 n8n timezone: America/New_York (UTC-5)
@@ -1186,6 +1248,7 @@ Cron: 0 4 * * *
 ```
 
 **Rozwiązanie 2 - Docker env:**
+
 ```yaml
 services:
   n8n:
@@ -1197,6 +1260,7 @@ services:
 ### 6. Prisma "Invalid DateTime" Error
 
 **Problem:**
+
 ```
 Invalid value for argument date_from: premature end of input
 ```
@@ -1204,40 +1268,43 @@ Invalid value for argument date_from: premature end of input
 **Przyczyna:** Prisma DateTime columns wymagają Date object, nie string
 
 **Rozwiązanie:**
+
 ```typescript
 // ❌ ZŁE
 prisma.import_jobs.create({
   data: {
-    date_from: "2026-02-25",  // String!
-    date_to: "2026-02-25"
-  }
-})
+    date_from: "2026-02-25", // String!
+    date_to: "2026-02-25",
+  },
+});
 
 // ✅ DOBRE
 prisma.import_jobs.create({
   data: {
-    date_from: new Date("2026-02-25"),  // Date object
-    date_to: new Date("2026-02-25")
-  }
-})
+    date_from: new Date("2026-02-25"), // Date object
+    date_to: new Date("2026-02-25"),
+  },
+});
 ```
 
 ### 7. Render PostgreSQL - SSL Connection Error
 
 **Problem:**
+
 ```
 Error: self signed certificate
 ```
 
 **Rozwiązanie:**
+
 ```typescript
 // server/src/services/database-browser.ts (lub inne Pool)
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
-    rejectUnauthorized: false  // Render wymaga SSL
-  }
-})
+    rejectUnauthorized: false, // Render wymaga SSL
+  },
+});
 ```
 
 ---
@@ -1245,6 +1312,7 @@ const pool = new Pool({
 ## �📚 Referencje
 
 **Pliki kluczowe:**
+
 - `server/routes/n8n-webhooks.ts` - Wszystkie endpointy webhooków (async job creation)
 - `server/background-import-worker.ts` - Worker procesujący kolejkę zadań
 - `server/league-config-server.ts` - Główny serwer Express (import routera)
@@ -1255,6 +1323,7 @@ const pool = new Pool({
 - `n8n-workflows/README.md` - Instrukcja użytkownika (konfiguracja wszystkich workflows)
 
 **Zależności:**
+
 - `server/src/services/data-importer.ts` - Import logic (with autoRetry)
 - `server/src/services/api-football-client.ts` - API Football integration
 - `server/src/services/database-browser.ts` - PostgreSQL browser (SSL support)
@@ -1262,11 +1331,13 @@ const pool = new Pool({
 - `prisma/schema.prisma` - Database schema (import_jobs table)
 
 **Deployment:**
+
 - Render Web Service - `https://bet-assistant-backend.onrender.com`
 - Render PostgreSQL - Frankfurt region, SSL required
 - PM2 Logs - Visible in Render Dashboard → Logs tab
 
 **Dokumentacja zewnętrzna:**
+
 - [n8n Docs](https://docs.n8n.io/)
 - [API Football](https://www.api-football.com/)
 - [Express.js](https://expressjs.com/)

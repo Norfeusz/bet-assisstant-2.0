@@ -2067,6 +2067,430 @@ WHERE created_at > NOW() - INTERVAL '24 hours'
 ORDER BY id DESC;
 ```
 
+### 12.5.1. Szczegółowa konfiguracja n8n - Krok po kroku
+
+#### PRZED IMPORTEM - Generowanie API Key
+
+**1. Przygotowanie N8N_WEBHOOK_KEY (WAŻNE!)**
+
+```powershell
+# Windows PowerShell - wygeneruj bezpieczny klucz:
+$bytes = New-Object byte[] 32
+[Security.Cryptography.RNGCryptoServiceProvider]::Create().GetBytes($bytes)
+$key = [Convert]::ToBase64String($bytes)
+Write-Host "Twój API Key: $key"
+
+# ZAPISZ TEN KLUCZ - będzie potrzebny w 3 miejscach!
+```
+
+**2. Dodaj klucz do Render Environment Variables**
+
+```
+1. Render Dashboard → bet-assistant-backend → Environment
+2. Kliknij "Add Environment Variable"
+3. Key: N8N_WEBHOOK_KEY
+4. Value: <wklej wygenerowany klucz>
+5. Kliknij "Save Changes"
+6. Poczekaj ~2 min (Render redeploy)
+```
+
+**3. Dodaj klucz do lokalnego .env (jeśli testujesz lokalnie)**
+
+```bash
+# d:\narzędzia\Bet Assistant 2.0\.env
+N8N_WEBHOOK_KEY=<ten sam klucz co na Render>
+DATABASE_URL=postgresql://...
+API_FOOTBALL_KEY=...
+```
+
+---
+
+#### INSTALACJA n8n (jeśli jeszcze nie masz)
+
+**Opcja A: Docker (ZALECANE)**
+
+```powershell
+# 1. Zainstaluj Docker Desktop for Windows
+# https://www.docker.com/products/docker-desktop
+
+# 2. Uruchom n8n:
+docker run -it --rm `
+  --name n8n `
+  -p 5678:5678 `
+  -v ${HOME}\.n8n:/home/node/.n8n `
+  -e GENERIC_TIMEZONE="Europe/Warsaw" `
+  n8nio/n8n
+
+# 3. Otwórz: http://localhost:5678
+```
+
+**Opcja B: npm (dla zaawansowanych)**
+
+```powershell
+npm install -g n8n
+n8n start
+# Otwórz: http://localhost:5678
+```
+
+**4. Pierwsza konfiguracja n8n (setup wizard)**
+
+```
+1. Otwórz http://localhost:5678
+2. Utwórz konto owner:
+   - Email: twoj@email.com
+   - Password: <silne hasło>
+3. Zaakceptuj warunki
+4. Dashboard n8n gotowy!
+```
+
+---
+
+#### KONFIGURACJA ENVIRONMENT VARIABLES W n8n
+
+**5. Dodaj zmienne środowiskowe (KRYTYCZNE!)**
+
+```
+1. n8n UI → Settings (ikona koła zębatego w lewym dolnym rogu)
+2. Variables (z menu po lewej)
+3. Kliknij "Add a new variable"
+
+Dodaj 2 zmienne:
+
+Variable 1:
+   Name: BET_ASSISTANT_WEBHOOK_KEY
+   Value: <wklej ten sam klucz co na Render>
+   
+Variable 2:
+   Name: BET_ASSISTANT_API_URL
+   Value: https://bet-assistant-backend.onrender.com
+
+4. Kliknij "Save" po każdej zmiennej
+```
+
+**Weryfikacja:**
+```
+Settings → Variables
+Powinieneś widzieć:
+✓ BET_ASSISTANT_WEBHOOK_KEY: ••••••••••••••••
+✓ BET_ASSISTANT_API_URL: https://bet-assistant-backend.onrender.com
+```
+
+---
+
+#### IMPORT WORKFLOWS
+
+**6. Import Keep-Alive Workflow (NAJWAŻNIEJSZY)**
+
+```
+1. n8n UI → Workflows (górne menu)
+2. Kliknij "Add workflow" (prawy górny róg)
+3. W nowym workflow kliknij "..." (3 kropki) → "Import from File"
+4. Wybierz plik: d:\narzędzia\Bet Assistant 2.0\n8n-workflows\keep-alive-render.json
+5. Kliknij "Import"
+6. Workflow załadowany! Nazwa: "Keep-Alive - Render Worker"
+```
+
+**7. Konfiguracja Keep-Alive workflow**
+
+```
+A. Sprawdź Schedule Trigger node:
+   - Kliknij na node "Schedule Trigger"
+   - Trigger Interval: Cron
+   - Cron Expression: */10 10-16,20-23,0-3 * * *
+   - Timezone: America/New_York (lub zmień na Europe/Warsaw jeśli chcesz)
+   
+B. Sprawdź HTTP Request node "Health Check":
+   - URL: https://bet-assistant-backend.onrender.com/api/webhooks/n8n/health
+   - Method: GET
+   - Authentication: None (używamy custom header)
+   - Headers → Parameters:
+     * Name: x-n8n-api-key
+     * Value: ={{ $env.BET_ASSISTANT_WEBHOOK_KEY }}  ← To pobiera z Variables!
+   - Timeout: 30000 (30 sekund)
+
+C. Zapisz workflow:
+   - Kliknij "Save" (góra ekranu)
+   
+D. AKTYWUJ workflow:
+   - Przełącznik "Inactive" → kliknij → zmieni się na "Active" (zielony)
+   - ✅ Workflow zacznie działać automatycznie co 10 minut!
+```
+
+**8. Import Manual Wake Worker**
+
+```
+1. Workflows → Add workflow → Import from File
+2. Wybierz: d:\narzędzia\Bet Assistant 2.0\n8n-workflows\manual-wake-worker.json
+3. Import
+4. NIE AKTYWUJ (to manual trigger, uruchamiasz ręcznie)
+5. Save
+```
+
+**9. Import Daily Import Matches (opcjonalnie)**
+
+```
+1. Workflows → Add workflow → Import from File
+2. Wybierz: d:\narzędzia\Bet Assistant 2.0\n8n-workflows\1-daily-import-matches.json
+3. Import
+
+Konfiguracja:
+   A. Schedule Trigger:
+      - Cron: 0 10 * * * (10:00 każdego dnia)
+      - Timezone: America/New_York (lub twoja)
+      
+   B. HTTP Request "Create Import Job":
+      - URL: {{ $env.BET_ASSISTANT_API_URL }}/api/webhooks/n8n/import-matches
+      - Headers → x-n8n-api-key: {{ $env.BET_ASSISTANT_WEBHOOK_KEY }}
+      - Body (JSON):
+        {
+          "daysAhead": 1,
+          "async": true
+        }
+   
+4. Save
+5. AKTYWUJ (jeśli chcesz codzienne importy)
+```
+
+---
+
+#### TESTOWANIE KONFIGURACJI
+
+**10. Test Manual Wake Worker (TERAZ!)**
+
+```
+1. Otwórz workflow "Manual Wake Worker"
+2. Kliknij "Test workflow" (duży przycisk u góry)
+3. Czekaj 20-60 sekund (cold start Render)
+4. Zobacz wyniki w każdym node:
+
+Krok 1: "Wake Backend" node
+   - Kliknij na node → Output
+   - Powinno być:
+     {
+       "success": true,
+       "status": "healthy",
+       "checks": {
+         "database": "ok",
+         "apiFootballKey": "configured"
+       }
+     }
+
+Krok 2: "Check Pending Jobs" node
+   - Kliknij → Output
+   - Powinno być:
+     {
+       "success": true,
+       "summary": { 
+         "total": 1,
+         "running": 0,
+         "rate_limited": 1,
+         "pending": 0
+       },
+       "rate_limited": [
+         {
+           "id": 345,
+           "type": "new_matches",
+           "reset_at": "2026-02-24T...",
+           "waiting_minutes": X
+         }
+       ]
+     }
+
+Krok 3: "Final Summary" node
+   - Kliknij → Output
+   - Powinno być:
+     {
+       "backend": { "success": true, "message": "✅ Backend is awake..." },
+       "jobs": { "total": 1, "pending": [...], ... },
+       "message": "Worker is awake! Found 1 jobs waiting.",
+       "nextAction": "Worker will process jobs in next polling cycle (max 5 min)"
+     }
+```
+
+**11. Sprawdź Keep-Alive (za 10-15 minut)**
+
+```
+1. Poczekaj ~10 minut (pierwszy scheduled trigger)
+2. n8n → Executions (lewe menu)
+3. Filtruj: "Keep-Alive - Render Worker"
+4. Powinieneś zobaczyć pierwszy execution:
+   - Status: Success (zielony)
+   - Duration: <500ms (jeśli backend nie spał)
+   - Trigger: Schedule Trigger
+
+5. Za kolejne 10 min → kolejny execution
+   ✓ Oznacza że workflow działa!
+```
+
+**12. Weryfikacja w Render Logs**
+
+```
+1. Render Dashboard → bet-assistant-backend → Logs (tab)
+2. Szukaj (Ctrl+F): "GET /api/webhooks/n8n/health"
+3. Powinieneś widzieć wpisy co 10 minut:
+   
+   2026-02-24T16:00:XX.XXXZ GET /api/webhooks/n8n/health 200 15ms
+   2026-02-24T16:10:XX.XXXZ GET /api/webhooks/n8n/health 200 12ms
+   2026-02-24T16:20:XX.XXXZ GET /api/webhooks/n8n/health 200 14ms
+   
+   ✓ Oznacza że Keep-Alive działa i Render nie śpi!
+```
+
+---
+
+#### TROUBLESHOOTING - NAJCZĘSTSZE PROBLEMY
+
+**Problem 1: "Unauthorized" (401) podczas testu**
+
+```
+Przyczyna: Zły API key lub nie ustawiony w Variables
+
+Rozwiązanie:
+1. Settings → Variables
+2. Sprawdź BET_ASSISTANT_WEBHOOK_KEY
+3. Porównaj z Render → Environment → N8N_WEBHOOK_KEY
+4. Muszą być IDENTYCZNE!
+
+Jak porównać (PowerShell):
+$n8nKey = "wklej_z_n8n_variables"
+$renderKey = "wklej_z_render_env"
+if ($n8nKey -eq $renderKey) { 
+  Write-Host "✓ Klucze są identyczne" -ForegroundColor Green 
+} else { 
+  Write-Host "✗ Klucze RÓŻNE!" -ForegroundColor Red 
+}
+```
+
+**Problem 2: Workflow nie wykonuje się co 10 minut**
+
+```
+Diagnoza:
+1. Czy workflow jest ACTIVE? (zielony przełącznik)
+2. Executions → czy są błędy?
+3. Schedule Trigger → czy cron expression poprawny?
+
+Rozwiązanie:
+1. Otwórz workflow "Keep-Alive - Render Worker"
+2. Sprawdź przełącznik u góry:
+   - Jeśli "Inactive" (szary) → kliknij → "Active" (zielony)
+3. Kliknij "Execute Workflow" (test manual)
+   - Jeśli działa → cron expression OK
+   - Jeśli błąd → zobacz error message
+```
+
+**Problem 3: Backend nadal usypia mimo Keep-Alive**
+
+```
+Diagnoza:
+1. Executions → czy Keep-Alive ma executions?
+2. Czy executions są SUCCESS czy ERROR?
+3. Sprawdź response time:
+
+curl -w "%{time_total}\n" -o /dev/null -s \
+  -H "x-n8n-api-key: TWOJ_KEY" \
+  https://bet-assistant-backend.onrender.com/api/webhooks/n8n/health
+
+Wynik:
+- 0.1-0.5s → backend aktywny ✓
+- 20-40s → backend zasnął (Keep-Alive nie działa!) ✗
+
+Rozwiązanie:
+1. Sprawdź czy workflow ACTIVE
+2. Sprawdź executions - czy są błędy?
+3. Jeśli brak executions → cron expression zły lub timezone issue
+```
+
+**Problem 4: "Cannot connect to backend" w Manual Wake**
+
+```
+Przyczyna: Backend śpi, cold start trwa >60s
+
+Rozwiązanie:
+1. Zwiększ timeout w HTTP Request node:
+   - Kliknij "Wake Backend" node
+   - Options → Timeout: 60000 → zmień na 120000 (2 minuty)
+2. Zapisz workflow
+3. Spróbuj ponownie "Test workflow"
+```
+
+**Problem 5: Environment Variable nie działa ({{ $env.XXX }} puste)**
+
+```
+Przyczyna: Zmienna nie zapisana lub błędna nazwa
+
+Rozwiązanie:
+1. Settings → Variables
+2. Sprawdź czy nazwa DOKŁADNIE pasuje:
+   - BET_ASSISTANT_WEBHOOK_KEY (nie bet_assistant_webhook_key!)
+   - BET_ASSISTANT_API_URL (nie BET_ASSISTANT_URL!)
+3. Jeśli źle → usuń i dodaj ponownie
+4. RESTART n8n:
+   - Docker: docker restart n8n
+   - npm: Ctrl+C, potem n8n start
+```
+
+---
+
+#### MONITOROWANIE PRODUKCYJNE
+
+**Checklist codziennie:**
+
+```
+1. n8n Executions → Keep-Alive
+   ✓ Co 10 min executions SUCCESS
+   ✗ Jeśli brak/błędy → backend będzie spał!
+
+2. Render Logs
+   ✓ GET /api/webhooks/n8n/health co 10 min
+   ✓ Background worker logs: "Checking for jobs every 5 minutes"
+
+3. Database - sprawdź pending jobs:
+   SELECT COUNT(*) FROM import_jobs WHERE status IN ('in_queue', 'rate_limited');
+   
+   ✓ 0-2 jobs → normalnie
+   ✗ >5 jobs → worker nie procesuje! (sprawdź Render logs)
+```
+
+**Alerty (opcjonalnie - zaawansowane):**
+
+```
+Dodaj Slack/Email notifications do workflow:
+1. Keep-Alive → dodaj IF node po Health Check
+2. Warunek: {{ $json.status }} != 'healthy'
+3. TRUE → Slack message: "⚠️ Backend unhealthy!"
+4. Otrzymasz alert gdy coś nie działa
+```
+
+---
+
+#### PODSUMOWANIE - CO POWINNO BYĆ SKONFIGUROWANE
+
+**✓ Checklist przed produkcją:**
+
+```
+Backend (Render):
+☐ Environment Variable: N8N_WEBHOOK_KEY ustawiony
+☐ Deployment zakończony (zielony status)
+☐ Logs pokazują: "Background Import Worker started"
+
+n8n (Local):
+☐ Variables ustawione: BET_ASSISTANT_WEBHOOK_KEY, BET_ASSISTANT_API_URL
+☐ Workflow "Keep-Alive - Render Worker" zaimportowany i ACTIVE
+☐ Workflow "Manual Wake Worker" zaimportowany (inactive)
+☐ Test manual wake SUCCESS (backend healthy, jobs visible)
+☐ Pierwsze execution Keep-Alive SUCCESS (za 10 min od aktywacji)
+
+Render Logs (za 20 min):
+☐ GET /api/webhooks/n8n/health co 10 minut
+☐ Brak "service sleeping" messages
+
+Database:
+☐ Job #345 (rate_limited) widoczny w import_jobs
+☐ Worker będzie go resume gdy reset_at < NOW()
+```
+
+**Jeśli wszystko ✓ → System gotowy do produkcji!** 🚀
+
 ### 12.6. Render Free Tier - Keep-Alive Strategy
 
 **Problem:**
