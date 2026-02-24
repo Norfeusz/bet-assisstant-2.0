@@ -120,11 +120,8 @@ router.post('/import-matches', webhookAuth, async (req, res) => {
 			const job = await prisma.import_jobs.create({
 				data: {
 					leagues: leagueIdsToImport,
-					date_from: startDate,
-					date_to: endDate,
-					job_type: 'new_matches',
-					status: 'in_queue',
-					progress: {},
+				date_from: new Date(startDate),
+				date_to: new Date(endDate),
 					total_matches: 0,
 					imported_matches: 0,
 					failed_matches: 0,
