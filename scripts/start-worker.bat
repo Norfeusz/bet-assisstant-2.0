@@ -4,23 +4,19 @@ echo   BET ASSISTANT 2.0 - IMPORT WORKER
 echo   (Background Jobs Processor)
 echo ========================================
 echo.
-
-REM Sprawdź czy jesteśmy w odpowiednim katalogu
-cd /d "%~dp0.."
-
-if not exist "package.json" (
-    echo [BLAD] Nie znaleziono package.json w katalogu projektu
-    pause
-    exit /b 1
-)
-
-echo [INFO] Uruchamiam Import Worker...
-echo [INFO] Worker bedzie sprawdzal zadania co 5 minut
-echo [INFO] Logi zapisywane w folderze: logs/
+echo [INFO] Import Worker jest WYLACZONY lokalnie
+echo [INFO] Worker dziala na Render przez PM2
 echo.
 echo ========================================
-echo   Aby zatrzymac worker nacisnij Ctrl+C
+echo   Worker zdalny (Render):
+echo   https://bet-assistant-backend.onrender.com
+echo.
+echo   Check status:
+echo   GET /api/webhooks/n8n/import-jobs/status
 echo ========================================
 echo.
-
-npm run server:worker
+echo Aby uruchomic workera lokalnie (development):
+echo   npm run server:worker
+echo.
+pause
+exit /b 0

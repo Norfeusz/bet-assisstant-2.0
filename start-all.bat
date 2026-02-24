@@ -54,8 +54,9 @@ if %errorlevel% equ 0 (
 )
 
 echo.
-echo [INFO] Uruchamiam import worker w nowym oknie...
-start "Import Worker" cmd /k "echo [WORKER] Uruchamiam import worker... && npm run server:worker"
+echo [INFO] Import Worker jest WYLACZONY - dziala na Render przez PM2
+REM echo [INFO] Uruchamiam import worker w nowym oknie...
+REM start "Import Worker" cmd /k "echo [WORKER] Uruchamiam import worker... && npm run server:worker"
 
 echo [INFO] Czekam 2 sekundy przed uruchomieniem frontendu...
 timeout /t 2 /nobreak >nul
@@ -67,8 +68,10 @@ echo.
 echo ========================================
 echo   URUCHOMIONE PROCESY:
 echo   - Backend Server (localhost:3000)
-echo   - Import Worker (background jobs)
 echo   - Frontend (localhost:5173)
+echo.
+echo   ZDALNIE (Render):
+echo   - Import Worker (PM2 na Render)
 echo ========================================
 echo.
 echo   Aby zatrzymac frontend nacisnij Ctrl+C

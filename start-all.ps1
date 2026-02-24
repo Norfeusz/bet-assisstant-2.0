@@ -43,14 +43,16 @@ Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$projectPath'
 
 Start-Sleep -Seconds 2
 
-# 2. Import Worker
-Write-Host "${blue}[2/3]${reset} Uruchamiam Import Worker..."
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$projectPath'; npm run server:worker" -WindowStyle Normal
+# 2. Import Worker - WYŁĄCZONY (teraz działa na Render przez PM2)
+# Write-Host "${blue}[2/3]${reset} Uruchamiam Import Worker..."
+# Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$projectPath'; npm run server:worker" -WindowStyle Normal
+# Start-Sleep -Seconds 2
+Write-Host "${yellow}ℹ️  Import Worker działa na Render (PM2) - nie uruchamiam lokalnie${reset}"
 
-Start-Sleep -Seconds 2
+Start-Sleep -Seconds 1
 
 # 3. Frontend (Vite)
-Write-Host "${blue}[3/3]${reset} Uruchamiam Frontend..."
+Write-Host "${blue}[2/2]${reset} Uruchamiam Frontend..."
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$projectPath'; npm run dev" -WindowStyle Normal
 
 Start-Sleep -Seconds 3
@@ -68,7 +70,8 @@ Write-Host "${blue}========================================${reset}"
 Write-Host "${green}  Aplikacja gotowa do użycia!${reset}"
 Write-Host "${blue}========================================${reset}"
 Write-Host ""
-Write-Host "Aby zamknąć wszystkie komponenty, zamknij wszystkie okna PowerShell"
+Write-Host "${yellow}⚙️  Import Worker:${reset} Działa na Render (https://bet-assistant-backend.onrender.com)"
+Write-Host "Aby zamknąć lokalne komponenty, zamknij okna PowerShell"
 Write-Host ""
 Write-Host "Naciśnij dowolny klawisz aby zamknąć to okno..."
 $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
