@@ -208,25 +208,33 @@ N8N_WEBHOOK_KEY=<tu-wklej-wygenerowany-klucz>
 
 **Restart backend** (Ctrl+C w terminalu, potem znowu `npm run dev`)
 
-### Krok 8: Dodaj klucz do n8n jako zmienną
+### Krok 8: Utwórz Custom Auth Credential
 
-1. W n8n idź do **Settings** (góra prawo, ikona ⚙️)
-2. **Environment Variables**
-3. Kliknij **"+ Add Variable"**
-4. **Name:** `BET_ASSISTANT_WEBHOOK_KEY`
-5. **Value:** `<ten-sam-klucz-co-w-env>`
-6. Kliknij **"Save"**
+⚠️ **UWAGA:** Environment Variables są dostępne TYLKO w **Enterprise n8n** (płatne)!
 
-### Krok 9: Użyj zmiennej w workflow
+**Dla FREE n8n** użyj **Custom Auth** credentials:
+
+1. W n8n idź do **Credentials** (menu górne)
+2. Kliknij **"+ Add Credential"**
+3. Wyszukaj i wybierz **"Custom Auth"** lub **"Header Auth"
+4. Konfiguracja:
+   - **Credential Name:** `Bet Assistant API Key`
+   - **Authentication:** Header Auth
+   - **Name:** `x-n8n-api-key`
+   - **Value:** `<wklej-klucz-z-.env>` (ten sam co `N8N_WEBHOOK_KEY`)
+5. Kliknij **"Save"**
+
+💡 **Dlaczego Custom Auth?** Darmowa wersja n8n nie ma `{{ $env.VARIABLE }}`, więc używamy credentials które automatycznie dodają header do każdego requesta.
+
+### Krok 9: Użyj credential w workflow
 
 Wróć do swojego workflow:
 
 1. Kliknij na **HTTP Request node**
-2. W Header `x-n8n-api-key` zmień value na:
-   ```
-   {{ $env.BET_ASSISTANT_WEBHOOK_KEY }}
-   ```
-   *(Dwukrotne nawiasy klamrowe {{ }} to składnia n8n dla zmiennych)*
+2. **Authentication:** Wybierz dropdown
+3. **Credential Type:** Wybierz **"Header Auth"** lub typ który utworzyłeś
+4. **Credential:** Wybierz **"Bet Assistant API Key"** (utworzony w kroku 8)
+5. **USUŃ** ręczny header `x-n8n-api-key` (credential doda go automatycznie)
 
 3. Kliknij **"Execute Workflow"** ponownie
 
@@ -250,9 +258,11 @@ Teraz powinieneś zobaczyć:
 ### Co się nauczyłeś:
 - ✅ Jak dodawać node'y
 - ✅ Jak konfigurować HTTP Request
-- ✅ Jak używać zmiennych środowiskowych `{{ $env.NAZWA }}`
+- ✅ Jak używać Custom Auth credentials (FREE n8n)
 - ✅ Jak testować workflows
 - ✅ Jak czytać resultat
+
+💡 **Bonus - Enterprise n8n:** W płatnej wersji możesz użyć `{{ $env.NAZWA }}` zamiast credentials.
 
 **Zapisz workflow:** Kliknij **"Save"** (góra)
 
@@ -297,15 +307,13 @@ Wynik: Codziennie o 10:00
 2. Wpisz: `set`
 3. Wybierz **"Set"** node
 4. Konfiguracja:
-   - Kliknij **"Add Value"** → **String**
-     - **Name:** `apiKey`
-     - **Value:** `{{ $env.BET_ASSISTANT_WEBHOOK_KEY }}`
-   
    - Kliknij **"Add Value"** → **Number**
      - **Name:** `daysAhead`
      - **Value:** `1`
 
-**Co to robi?** Przygotowuje dane które wyślemy do API
+**Co to robi?** Przygotowuje parametry dla API
+
+💡 **Uwaga:** Nie dodajemy `apiKey` tutaj - używamy Custom Auth credential który automatycznie doda header!
 
 ### Krok 4: Dodaj HTTP Request do importu
 
@@ -315,10 +323,9 @@ Wynik: Codziennie o 10:00
    - **Method:** POST
    - **URL:** `http://localhost:3000/api/webhooks/n8n/import-matches`
    
-   - **Send Headers:** ON (toggle)
-   - Kliknij **"+ Add Header"**
-     - **Name:** `x-n8n-api-key`
-     - **Value:** `{{ $json.apiKey }}`
+   - **Authentication:** 
+     - **Credential Type:** Header Auth (lub Custom Auth)
+     - **Credential:** Wybierz **"Bet Assistant API Key"**
    
    - **Send Body:** ON (toggle)
    - **Body Content Type:** JSON
@@ -332,7 +339,7 @@ Wynik: Codziennie o 10:00
    
    - **Options** → **Timeout:** `300000` (5 minut)
 
-**Co to robi?** Wysyła POST request do API z parametrami importu
+**Co to robi?** Wysyła POST request do API. Custom Auth credential automatycznie dodaje header `x-n8n-api-key`!
 
 ### Krok 5: Dodaj node do sprawdzenia sukcesu
 
@@ -409,9 +416,10 @@ Dla prostoty, dodamy **"Stop and Error"** node dla błędów:
 <summary>Kliknij aby pokazać wskazówki</summary>
 
 1. **Schedule Trigger:** `1 0 * * *` (00:01)
-2. **Set node:** apiKey + daysBack = 1
+2. **Set node:** daysBack = 1
 3. **HTTP Request POST:** 
    - URL: `http://localhost:3000/api/webhooks/n8n/update-results`
+   - Authentication: Użyj credential **"Bet Assistant API Key"**
    - Body: `{ "daysBack": {{ $json.daysBack }} }`
 4. **IF node:** sprawdź success
 5. **Active:** ON
@@ -429,13 +437,12 @@ Dla prostoty, dodamy **"Stop and Error"** node dla błędów:
    - Cron: `1 0 * * *`
 
 3. Set node:
-   - apiKey (String): `{{ $env.BET_ASSISTANT_WEBHOOK_KEY }}`
    - daysBack (Number): `1`
 
 4. HTTP Request:
    - Method: POST
    - URL: `http://localhost:3000/api/webhooks/n8n/update-results`
-   - Header: `x-n8n-api-key` = `{{ $json.apiKey }}`
+   - Authentication: Credential **"Bet Assistant API Key"**
    - Body: `{ "daysBack": {{ $json.daysBack }} }`
    - Timeout: 180000 (3 min)
 
@@ -461,9 +468,9 @@ Dla prostoty, dodamy **"Stop and Error"** node dla błędów:
 Powtórz schemat z poprzednich lekcji:
 
 1. Schedule Trigger: `0 0 * * *` (midnight)
-2. Set node: apiKey
-3. HTTP Request POST:
+2. HTTP Request POST:
    - URL: `http://localhost:3000/api/webhooks/n8n/backup-database`
+   - Authentication: Credential **"Bet Assistant API Key"**
    - Body: `{ "pushToGit": false, "skipIfNoChanges": true }`
 
 ### Krok 2: NOWE - Dodaj Git commit po backupie
@@ -515,11 +522,11 @@ Schedule Trigger:
 
 **Node 1 - Health Check:**
 - GET `http://localhost:3000/api/webhooks/n8n/health`
-- Header: x-n8n-api-key
+- Authentication: Credential **"Bet Assistant API Key"**
 
 **Node 2 - Status:**
 - GET `http://localhost:3000/api/webhooks/n8n/status`
-- Header: x-n8n-api-key
+- Authentication: Credential **"Bet Assistant API Key"**
 
 Jak to zrobić?
 1. Dodaj pierwszy HTTP Request normalnie (pod Schedule)
@@ -552,10 +559,12 @@ Dla FALSE outputs - dodaj powiadomienia!
 **Podstawy:**
 ```javascript
 {{ $json.propertyName }}          // Dostęp do danych
-{{ $env.VARIABLE }}               // Zmienne środowiskowe
+{{ $env.VARIABLE }}               // Zmienne środowiskowe (tylko Enterprise!)
 {{ $now.toFormat('yyyy-MM-dd') }} // Data dzisiaj
 {{ $now.plus({ days: 1 }) }}      // Jutro
 ```
+
+⚠️ **FREE n8n:** `{{ $env.VARIABLE }}` NIE DZIAŁA - użyj Custom Auth credentials zamiast!
 
 **Zaawansowane:**
 ```javascript
@@ -625,10 +634,15 @@ Włącz "Continue on Fail" w HTTP Request node!
 
 ### Problem: "Unauthorized" mimo prawidłowego klucza
 
-**Rozwiązanie:**
-1. Sprawdź czy klucz w `.env` jest identyczny jak w n8n Environment Variables
+**Rozwiązanie (FREE n8n - Custom Auth):**
+1. Sprawdź czy klucz w `.env` (N8N_WEBHOOK_KEY) jest identyczny jak w Custom Auth credential
 2. Restart backend po zmianie `.env`
-3. Sprawdź czy używasz `{{ $env.BET_ASSISTANT_WEBHOOK_KEY }}` a nie hard-coded klucza
+3. Sprawdź czy HTTP Request node używa Custom Auth credential (nie ręcznego headera)
+4. Sprawdź czy credential ma poprawną nazwę headera: `x-n8n-api-key`
+
+**Rozwiązanie (Enterprise n8n - Environment Variables):**
+1. Sprawdź czy używasz `{{ $env.BET_ASSISTANT_WEBHOOK_KEY }}`
+2. Zrestartuj n8n po dodaniu zmiennej środowiskowej
 
 ### Problem: Timeout w HTTP Request
 
@@ -691,7 +705,8 @@ Włącz "Continue on Fail" w HTTP Request node!
 - Stop and Error (error handling)
 
 ✅ **Zaawansowane:**
-- Environment Variables `{{ $env.VAR }}`
+- Custom Auth credentials (FREE tier)
+- Environment Variables `{{ $env.VAR }}` (Enterprise only)
 - JSON expressions `{{ $json.property }}`
 - Date formatting `{{ $now.toFormat() }}`
 - Równoległe branches

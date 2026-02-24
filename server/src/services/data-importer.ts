@@ -86,9 +86,16 @@ export class DataImporter {
 		fromDate: string,
 		toDate: string,
 		resume: boolean = false,
-		autoRetry: boolean = false
+		autoRetry: boolean = false,
+		leagueIds?: number[]  // Opcjonalne: konkretne ligi zamiast wszystkich enabled
 	): Promise<void> {
-		const enabledLeagues = this.leagueSelector.getEnabledLeagues()
+		let enabledLeagues = this.leagueSelector.getEnabledLeagues()
+		
+		// Filtruj do konkretnych lig jeśli podano
+		if (leagueIds && leagueIds.length > 0) {
+			enabledLeagues = enabledLeagues.filter(league => leagueIds.includes(league.id))
+			console.log(`🎯 Filtering to ${enabledLeagues.length} specific leagues:`, leagueIds)
+		}
 
 		if (enabledLeagues.length === 0) {
 			throw new Error('No leagues enabled. Run league selector initialization first.')

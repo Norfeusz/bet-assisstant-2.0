@@ -69,16 +69,54 @@ export class DatabaseBrowserService {
 	}
 
 	/**
+	 * Convert Polish date format (dd.MM.yyyy) to ISO format (yyyy-MM-dd)
+	 */
+	private convertDateToISO(value: any): any {
+		if (typeof value !== 'string') return value
+		
+		// Match Polish date format: dd.MM.yyyy or dd.mm.yyyy
+		const polishDateMatch = value.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/)
+		if (polishDateMatch) {
+			const [, day, month, year] = polishDateMatch
+			// Return ISO format: yyyy-MM-dd
+			return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
+		}
+		
+		return value
+	}
+
+	/**
+	 * Convert empty string to null for numeric/date columns
+	 */
+	private sanitizeFilterValue(value: any, columnInfo?: ColumnInfo): any {
+		// Empty string should be null for non-string types
+		if (value === '') {
+			return null
+		}
+		
+		// Convert Polish dates to ISO format
+		const convertedValue = this.convertDateToISO(value)
+		
+		return convertedValue
+	}
+
+	/**
 	 * Get connection pool for specific database
 	 */
 	private getPool(databaseName: string): Pool {
 		const connectionString = `${this.connectionString}${databaseName}`
 		
+		// Check if this is a remote connection (Render, etc.)
+		const isRemote = connectionString.includes('render.com') || 
+		                 connectionString.includes('amazonaws.com') ||
+		                 !connectionString.includes('localhost')
+		
 		return new Pool({
 			connectionString,
 			max: 10,
 			idleTimeoutMillis: 30000,
-			connectionTimeoutMillis: 2000,
+			connectionTimeoutMillis: 10000, // 10 seconds for remote connections
+			ssl: isRemote ? { rejectUnauthorized: false } : false,
 		})
 	}
 
@@ -107,20 +145,26 @@ export class DatabaseBrowserService {
 	 * List all databases on server
 	 */
 	async listDatabases(): Promise<DatabaseInfo[]> {
-		const query = `
-			SELECT 
-				datname as name,
-				pg_size_pretty(pg_database_size(datname)) as size
-			FROM pg_database
-			WHERE datistemplate = false
-			AND datname NOT IN ('postgres', 'template0', 'template1')
-			ORDER BY datname
-		`
-		
 		try {
-			// Connect to 'postgres' database to list all databases
-			const rows = await this.executeQuery<DatabaseInfo>('postgres', query)
-			console.log(`📊 Found ${rows.length} databases`)
+			// Extract database name from DATABASE_URL
+			const dbUrl = process.env.DATABASE_URL || ''
+			const match = dbUrl.match(/\/([^\/\?]+)(\?|$)/)
+			
+			if (!match) {
+				throw new Error('Could not extract database name from DATABASE_URL')
+			}
+			
+			const databaseName = match[1]
+			
+			// Get size of current database only (no superuser permissions needed)
+			const query = `
+				SELECT 
+					current_database() as name,
+					pg_size_pretty(pg_database_size(current_database())) as size
+			`
+			
+			const rows = await this.executeQuery<DatabaseInfo>(databaseName, query)
+			console.log(`📊 Found ${rows.length} database(s): ${databaseName}`)
 			return rows
 		} catch (error: any) {
 			console.error('Error listing databases:', error)
@@ -278,13 +322,27 @@ export class DatabaseBrowserService {
 				} else if (filter.operator === 'IS NOT NULL') {
 					whereClauses.push(`"${filter.column}" IS NOT NULL`)
 				} else if (filter.operator === 'BETWEEN' && filter.value !== undefined && filter.value2 !== undefined) {
-					whereClauses.push(`"${filter.column}" BETWEEN $${paramIndex} AND $${paramIndex + 1}`)
-					params.push(filter.value, filter.value2)
-					paramIndex += 2
+					const sanitizedValue1 = this.sanitizeFilterValue(filter.value)
+					const sanitizedValue2 = this.sanitizeFilterValue(filter.value2)
+					
+					// Skip filter if values are null (empty strings)
+					if (sanitizedValue1 !== null && sanitizedValue2 !== null) {
+						whereClauses.push(`"${filter.column}" BETWEEN $${paramIndex} AND $${paramIndex + 1}`)
+						params.push(sanitizedValue1, sanitizedValue2)
+						paramIndex += 2
+					}
 				} else if (filter.value !== undefined) {
-					whereClauses.push(`"${filter.column}" ${filter.operator} $${paramIndex}`)
-					params.push(filter.operator === 'LIKE' || filter.operator === 'ILIKE' ? `%${filter.value}%` : filter.value)
-					paramIndex++
+					const sanitizedValue = this.sanitizeFilterValue(filter.value)
+					
+					// Skip filter if value is null (empty string)
+					if (sanitizedValue !== null) {
+						whereClauses.push(`"${filter.column}" ${filter.operator} $${paramIndex}`)
+						const paramValue = (filter.operator === 'LIKE' || filter.operator === 'ILIKE') 
+							? `%${sanitizedValue}%` 
+							: sanitizedValue
+						params.push(paramValue)
+						paramIndex++
+					}
 				}
 			}
 		}

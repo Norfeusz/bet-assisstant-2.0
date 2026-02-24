@@ -37,7 +37,7 @@ const webhookAuth = (req: express.Request, res: express.Response, next: express.
 }
 
 // ====================================
-// WEBHOOK: Import nowych meczów
+// WEBHOOK: Import nowych meczów (ASYNC z job queue)
 // ====================================
 interface ImportWebhookRequest {
 	leagueIds?: number[]        // Opcjonalne - jeśli nie podano, bierze wszystkie enabled
@@ -45,6 +45,7 @@ interface ImportWebhookRequest {
 	dateTo?: string             // Format: YYYY-MM-DD
 	daysAhead?: number          // Alternatywa: ile dni do przodu (np. 7)
 	notifyEmail?: string        // Email do powiadomień
+	async?: boolean             // Jeśli true, tworzy job i zwraca jobId (default: true)
 }
 
 router.post('/import-matches', webhookAuth, async (req, res) => {
@@ -57,14 +58,16 @@ router.post('/import-matches', webhookAuth, async (req, res) => {
 			dateFrom, 
 			dateTo, 
 			daysAhead = 7,
-			notifyEmail 
+			notifyEmail,
+			async = true
 		} = req.body as ImportWebhookRequest
 
 		console.log('📥 n8n webhook triggered: import-matches', {
 			leagueIds: leagueIds?.length || 'all enabled',
 			dateFrom: dateFrom || 'today',
 			dateTo: dateTo || `+${daysAhead} days`,
-			notifyEmail: notifyEmail || 'none'
+			notifyEmail: notifyEmail || 'none',
+			async
 		})
 
 		// Oblicz daty jeśli nie podano
@@ -108,15 +111,54 @@ router.post('/import-matches', webhookAuth, async (req, res) => {
 			})
 		}
 
-		console.log(`📊 Importing ${leaguesToImport.length} leagues from ${startDate} to ${endDate}`)
+		const leagueIdsToImport = leaguesToImport.map(l => l.id)
 
-		// Inicjalizuj importer
+		// TRYB ASYNCHRONICZNY: Tworzy job w bazie, Background Worker go przetworzy
+		if (async) {
+			console.log(`📊 Creating async import job: ${leagueIdsToImport.length} leagues from ${startDate} to ${endDate}`)
+
+			const job = await prisma.import_jobs.create({
+				data: {
+					leagues: leagueIdsToImport,
+					date_from: startDate,
+					date_to: endDate,
+					job_type: 'new_matches',
+					status: 'in_queue',
+					progress: {},
+					total_matches: 0,
+					imported_matches: 0,
+					failed_matches: 0,
+					rate_limit_remaining: 0,
+					created_at: new Date()
+				}
+			})
+
+			console.log(`✅ Job created with ID: ${job.id}`)
+
+			return res.json({
+				success: true,
+				async: true,
+				jobId: job.id,
+				message: 'Import job created successfully. Background worker will process it.',
+				checkStatusUrl: `/api/import-jobs/${job.id}`,
+				job: {
+					id: job.id,
+					status: job.status,
+					leagues: leagueIdsToImport.length,
+					dateRange: { from: startDate, to: endDate }
+				}
+			})
+		}
+
+		// TRYB SYNCHRONICZNY (async=false): Import bezpośredni BEZ auto-retry
+		console.log(`📊 Starting synchronous import: ${leagueIdsToImport.length} leagues from ${startDate} to ${endDate}`)
+
 		const apiClient = new ApiFootballClient(process.env.API_FOOTBALL_KEY!)
 		const leagueSelector = new LeagueSelector(apiClient)
 		importerInstance = new DataImporter(apiClient, leagueSelector)
 
-		// Import dla wszystkich lig jednocześnie (używa istniejącej konfiguracji z auto-retry)
-		await importerInstance.importDateRange(startDate, endDate, false, true) // autoRetry: true
+		// Import ZONDER auto-retry (żeby nie czekać 15 min w HTTP request)
+		await importerInstance.importDateRange(startDate, endDate, false, false, leagueIdsToImport) // autoRetry: FALSE
 		
 		// Pobierz statystyki
 		const progress = importerInstance.getProgress()
@@ -125,6 +167,7 @@ router.post('/import-matches', webhookAuth, async (req, res) => {
 
 		const result = {
 			success: true,
+			async: false,
 			stats: {
 				totalMatches: progress.importedMatches + progress.failedMatches + progress.skippedMatches,
 				imported: progress.importedMatches,

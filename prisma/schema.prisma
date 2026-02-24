@@ -142,6 +142,7 @@ model bets {
   // System fields
   created_at            DateTime  @default(now()) @db.Timestamptz(6)
   updated_at            DateTime  @default(now()) @db.Timestamptz(6)
+  phase                 String?   @db.VarChar(1)
 
   @@index([match_id])
   @@index([match_date])
@@ -194,6 +195,7 @@ model coupons {
   // System fields
   created_at            DateTime  @default(now()) @db.Timestamptz(6)
   updated_at            DateTime  @default(now()) @db.Timestamptz(6)
+  phase                 String?   @db.VarChar(1)
 
   @@index([coupon_id])
   @@index([match_id])
