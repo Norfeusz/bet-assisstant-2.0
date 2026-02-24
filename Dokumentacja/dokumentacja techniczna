@@ -1,7 +1,7 @@
 # DOKUMENTACJA TECHNICZNA - BET ASSISTANT 2.0
 
-**Data aktualizacji:** 14 lutego 2026  
-**Wersja:** 1.3 (Database Browser - Full CRUD Operations)
+**Data aktualizacji:** 24 lutego 2026  
+**Wersja:** 1.4 (n8n Automation + Background Import Worker)
 
 ---
 
@@ -16,11 +16,19 @@ D:\narzędzia\Bet Assistant 2.0\
 │   │   └── Migracja.txt          # Zadania do wykonania
 │   ├── dokumentacja techniczna     # Ten plik
 │   ├── instrukcja obsługi          # Przewodnik użytkownika
-│   └── instrukcje dla agentów      # Workflow dla AI agentów
+│   ├── instrukcje dla agentów      # Workflow dla AI agentów
+│   ├── n8n-automation-tech.md    # ✅ Szczegółowa dokumentacja n8n
+│   └── README.md                 # Główny README projektu
 │
 ├── config/                        # Konfiguracja backendu
 │   ├── google-sheets-config.json # Google Sheets API
 │   └── bet-conditions.json       # Warunki zakładów
+│
+├── n8n-workflows/                 # ✅ n8n automation workflows
+│   ├── README.md                 # Instrukcja konfiguracji n8n
+│   ├── daily-import.json         # Workflow: codzienny import
+│   ├── update-results.json       # Workflow: aktualizacja wyników
+│   └── backup-database.json      # Workflow: backup bazy
 │
 ├── node_modules/                   # Zależności (nie w Git)
 │
@@ -38,11 +46,13 @@ D:\narzędzia\Bet Assistant 2.0\
 │   │   ├── strefa-typera.ts     # /api/strefa-typera/*
 │   │   ├── verify-bets.ts       # /api/verify-bets/*
 │   │   ├── bet-finder.ts        # ✅ /api/bet-finder/*
-│   │   └── database.ts          # ✅ /api/database/* (Database Browser)
+│   │   ├── database.ts          # ✅ /api/database/* (Database Browser)
+│   │   └── n8n-webhooks.ts      # ✅ /api/webhooks/n8n/* (n8n automation)
 │   │
 │   ├── scripts/                  # Utility scripts
 │   │   ├── backup-database.ts
-│   │   └── populate-leagues.ts
+│   │   ├── populate-leagues.ts
+│   │   └── restore-leagues-config.js  # ✅ Restore leagues from DB
 │   │
 │   ├── src/                      # Backend source code
 │   │   ├── db/                  # Prisma client
@@ -53,7 +63,7 @@ D:\narzędzia\Bet Assistant 2.0\
 │   │   │   ├── league-selector.ts
 │   │   │   ├── bet-finder-algorithms.ts  # ✅ Algorytmy wyszukiwania
 │   │   │   ├── bet-finder-service.ts     # ✅ Zarządzanie kolejką
-│   │   │   └── database-browser.ts       # ✅ Universal PostgreSQL Browser
+│   │   │   └── database-browser.ts       # ✅ Universal PostgreSQL Browser (SSL support)
 │   │   ├── types/               # TypeScript types
 │   │   └── utils/               # Helper functions
 │   │
@@ -61,8 +71,8 @@ D:\narzędzia\Bet Assistant 2.0\
 │   │   ├── backup-tables.ts
 │   │   └── bet-statistics.ts
 │   │
-│   ├── background-import-worker.ts  # Worker process
-│   └── league-config-server.ts      # Main server file
+│   ├── background-import-worker.ts  # ✅ Worker process (PM2)
+│   └── league-config-server.ts      # ✅ Main server file (PM2)
 │
 ├── src/                           # Frontend (React + TypeScript)
 │   ├── api/                       # Komunikacja z backendem
@@ -102,8 +112,11 @@ D:\narzędzia\Bet Assistant 2.0\
 ├── stary/                         # Stary projekt (referencja - do usunięcia)
 │   └── (cały poprzedni kod)
 │
-├── .env                           # Environment variables (NIE w Git!)
+├── .env                           # ✅ Environment variables (DATABASE_URL, N8N_WEBHOOK_KEY)
+├── .env.example                   # ✅ Template for environment setup
 ├── .gitignore                     # Git ignore rules
+├── .railwayignore                 # ✅ Render deployment ignore
+├── ecosystem.config.cjs           # ✅ PM2 configuration (backend + worker)
 ├── index.html                     # HTML entry point
 ├── package.json                   # Dependencies & scripts
 ├── package-lock.json              # Lock file
@@ -1910,7 +1923,196 @@ Wcześniej używano `toISOString().split('T')[0]` co dawało UTC date (dzień wc
 
 ---
 
-## 12. NOTATKI TECHNICZNE
+## 12. SYSTEM AUTOMATYZACJI n8n
+
+**Data wdrożenia:** 24 lutego 2026
+
+### 12.1. Przegląd systemu
+
+System wykorzystuje **n8n** (workflow automation platform) do automatyzacji codziennych zadań:
+
+- **Codzienny import nowych meczów** - Schedule trigger 10:00 CET
+- **Aktualizacja wyników** - Po zakończeniu meczów
+- **Backup bazy danych** - Regularne kopie bezpieczeństwa
+
+**Architecture:** n8n → HTTPS webhooks → Backend API → Async job queue → Background Worker
+
+### 12.2. Komponenty systemu
+
+#### Backend Webhooks (`server/routes/n8n-webhooks.ts`)
+
+Endpointy zabezpieczone middleware `webhookAuth` (weryfikacja API key):
+
+1. `POST /api/webhooks/n8n/import-matches` - Tworzy job importu nowych meczów
+2. `POST /api/webhooks/n8n/update-results` - Tworzy job aktualizacji wyników
+3. `POST /api/webhooks/n8n/backup-database` - Wykonuje backup bazy
+4. `GET /api/webhooks/n8n/health` - Health check
+5. `GET /api/webhooks/n8n/status` - Status systemu
+
+**Tryby pracy:**
+- **Async (domyślnie)** - Webhook tworzy job w bazie, worker procesuje w tle
+- **Sync (debug)** - Webhook wykonuje import bezpośrednio (risk: timeout)
+
+#### Background Import Worker (`server/background-import-worker.ts`)
+
+Samodzielny proces zarządzający kolejką zadań:
+
+- **Polling:** Co 5 minut sprawdza bazę dla nowych jobów
+- **Single job lock:** Tylko jedno zadanie naraz
+- **Auto-retry:** Automatyczne wznowienie po rate limit (15 min)
+- **Resume:** Kontynuacja od miejsca przerwania
+- **Priority:** rate_limited jobs > pending jobs > in_queue jobs
+
+**Tabela:** `import_jobs` (Prisma)
+```typescript
+status: 'pending' | 'running' | 'rate_limited' | 'completed' | 'failed' | 'in_queue'
+progress: { completed_leagues: number[], current_league?: number }
+rate_limit_reset_at: DateTime?
+```
+
+#### PM2 Process Manager
+
+Backend i Worker działają jako osobne procesy:
+
+```javascript
+// ecosystem.config.cjs
+module.exports = {
+  apps: [
+    { name: 'backend-server', script: 'npx tsx server/league-config-server.ts' },
+    { name: 'background-worker', script: 'npx tsx server/background-import-worker.ts' }
+  ]
+}
+```
+
+**Komendy:**
+```bash
+npm run server        # PM2: start both (backend + worker)
+pm2 logs             # Zobacz logi obu procesów
+pm2 restart all      # Restart po zmianach w kodzie
+```
+
+### 12.3. Deployment (Render)
+
+**Backend:** Render Web Service
+- URL: `https://bet-assistant-backend.onrender.com`
+- Start Command: `pm2 start ecosystem.config.cjs --no-daemon`
+- Environment: Node.js 20+, PM2 installed
+
+**Database:** Render PostgreSQL (Frankfurt)
+- SSL required: `{ rejectUnauthorized: false }`
+- Connection pooling w `database-browser.ts`
+
+**Environment Variables:**
+```bash
+DATABASE_URL=postgresql://user:pass@host/db?sslmode=require
+API_FOOTBALL_KEY=your_key
+N8N_WEBHOOK_KEY=secret_key_for_webhooks
+```
+
+### 12.4. Szczegółowa dokumentacja
+
+**Pełna dokumentacja techniczna:**
+- [n8n-automation-tech.md](n8n-automation-tech.md) - Architektura, diagramy, API endpoints, troubleshooting, deployment
+
+**Instrukcje użytkownika:**
+- [n8n-workflows/README.md](../n8n-workflows/README.md) - Konfiguracja workflow, przykłady
+
+**Kluczowe pliki:**
+- `server/routes/n8n-webhooks.ts` - Wszystkie endpointy webhooków (async job creation + status)
+- `server/background-import-worker.ts` - Worker logic (polling co 5 min)
+- `ecosystem.config.cjs` - PM2 configuration (backend + worker)
+- `n8n-workflows/*.json` - n8n workflows (6 workflows)
+- `.env` - N8N_WEBHOOK_KEY configuration
+
+**n8n Workflows:**
+1. `1-daily-import-matches.json` - Codzienny import (10:00, async job queue)
+2. `2-update-results-2h.json` - Aktualizacja wyników (0:01)
+3. `3-daily-database-backup.json` - Backup bazy (0:00)
+4. `4-monitoring-alerts.json` - Health check (co 15 min)
+5. `keep-alive-render.json` - **KRYTYCZNY** - Podtrzymuje worker (10-16, 20-03 NY, 52% limitu Render)
+6. `manual-wake-worker.json` - Ręczne obudzenie + sprawdzenie pending jobs
+
+### 12.5. Monitoring i troubleshooting
+
+**Health check:**
+```bash
+curl https://bet-assistant-backend.onrender.com/api/webhooks/n8n/health \n  -H "x-n8n-api-key: YOUR_KEY"
+```
+
+**Status systemu:**
+```bash
+curl https://bet-assistant-backend.onrender.com/api/webhooks/n8n/status \
+  -H "x-n8n-api-key: YOUR_KEY"
+```
+
+**Status pending jobs (dla manual wake):**
+```bash
+curl https://bet-assistant-backend.onrender.com/api/webhooks/n8n/import-jobs/status \
+  -H "x-n8n-api-key: YOUR_KEY"
+
+# Zwraca: running, rate_limited, pending jobs z detalami
+```
+
+**Logi worker (Render Dashboard):**
+```bash
+pm2 logs background-worker
+```
+
+**Statusy jobów:**
+```sql
+SELECT id, status, job_type, imported_matches, 
+       created_at, started_at, completed_at, rate_limit_reset_at
+FROM import_jobs 
+WHERE created_at > NOW() - INTERVAL '24 hours'
+ORDER BY id DESC;
+```
+
+### 12.6. Render Free Tier - Keep-Alive Strategy
+
+**Problem:**
+- Render Free Tier usypia po 15 min bez HTTP traffic
+- Worker polling loop (co 5 min) NIE generuje HTTP
+- Rate limited jobs (wait 15 min) → serwis zaśnie → worker nie wznowi
+
+**Rozwiązanie: Keep-Alive Workflow**
+
+**Harmonogram (optymalizacja kosztów):**
+```
+Cron: */10 10-16,20-23,0-3 * * *  (America/New_York timezone)
+
+Aktywny:
+  10:00-16:59 NY (16:00-22:59 PL) - 7h  - daily import + rate limit recovery
+  20:00-03:59 NY (02:00-09:59 PL) - 8h  - update results + nocne jobs
+
+Śpi:
+  04:00-09:59 NY (10:00-15:59 PL) - 6h  - brak scheduled jobs
+  17:00-19:59 NY (23:00-01:59 PL) - 3h  - spokój
+```
+
+**Koszt:**
+```
+13h/dzień × 30 dni = 390h/miesiąc
+Render Free Tier limit: 750h/miesiąc
+Wykorzystanie: 52% (margines bezpieczeństwa: 48%)
+```
+
+**Instalacja:**
+1. Import `n8n-workflows/keep-alive-render.json` do n8n
+2. Ustaw Environment Variable: `BET_ASSISTANT_WEBHOOK_KEY`
+3. Aktywuj workflow (przełącznik Active)
+
+**Bez Keep-Alive:**
+- Jobs pozostają w status='rate_limited' do następnego dnia
+- Ręczne importy poza harmonogramem nie są procesowane
+- Cold start przy każdym daily import (20-40s delay)
+
+**Alternative: Render Starter ($7/miesiąc)**
+- Unlimited hours, brak sleep mode
+- Instant response, 24/7 uptime
+
+---
+
+## 13. NOTATKI TECHNICZNE
 
 ### Performance considerations:
 
@@ -1933,5 +2135,5 @@ Wcześniej używano `toISOString().split('T')[0]` co dawało UTC date (dzień wc
 
 ---
 
-**Ostatnia aktualizacja:** 14 lutego 2026  
-**Autor dokumentacji:** AI Agent (Migracja + Database Browser Implementation)
+**Ostatnia aktualizacja:** 24 lutego 2026  
+**Autor dokumentacji:** AI Agent (Migracja + Database Browser + n8n Automation)

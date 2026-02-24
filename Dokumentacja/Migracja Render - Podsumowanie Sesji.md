@@ -21,11 +21,13 @@
 ## 1. Problem początkowy
 
 ### Objawy:
+
 - **Prisma Studio** pokazywał lokalną bazę danych zamiast Render PostgreSQL
 - Backend miał problemy z połączeniem do Render (ECONNRESET errors)
 - Potrzeba było zmigrować tabele: `bets`, `leagues`, `import_jobs`, `coupons` z lokalnej bazy na Render
 
 ### Diagnoza:
+
 ```powershell
 # Sprawdzenie DATABASE_URL
 $env:DATABASE_URL
@@ -45,7 +47,7 @@ $env:DATABASE_URL
 psql -h dpg-d6bplrp5pdvs73eeol5g-a.frankfurt-postgres.render.com `
      -U betassistant -d betassistant `
      -c "SELECT COUNT(*) FROM matches;"
-     
+
 # Wynik: 28270 meczów (✅ połączenie działa)
 ```
 
@@ -69,21 +71,25 @@ npx prisma generate                # Regeneracja klienta z .env
 ## 3. Rozwiązanie problemu SSL
 
 ### Problem:
+
 Backend zwracał błąd przy próbie połączenia z Render:
+
 ```
 Error: read ECONNRESET
 ```
 
 ### Rozwiązanie:
+
 **Plik:** `server/src/services/database-browser.ts`
 
 **Dodano SSL configuration:**
+
 ```typescript
 private getPool(databaseName: string): Pool {
-  const isRemote = connectionString.includes('render.com') || 
+  const isRemote = connectionString.includes('render.com') ||
                    connectionString.includes('amazonaws.com') ||
                    !connectionString.includes('localhost')
-  
+
   return new Pool({
     connectionString,
     ssl: isRemote ? { rejectUnauthorized: false } : false,  // ✅ DODANE
@@ -95,6 +101,7 @@ private getPool(databaseName: string): Pool {
 ### Dodatkowe poprawki w DatabaseBrowserService:
 
 #### 1. Konwersja formatu dat (Polski → ISO)
+
 ```typescript
 private convertDateToISO(value: any): any {
   // "24.02.2026" → "2026-02-24"
@@ -108,6 +115,7 @@ private convertDateToISO(value: any): any {
 ```
 
 #### 2. Filtrowanie pustych wartości
+
 ```typescript
 private sanitizeFilterValue(value: any): any | null {
   if (value === '' || value === null || value === undefined) {
@@ -124,15 +132,18 @@ private sanitizeFilterValue(value: any): any | null {
 ## 4. Synchronizacja schematów
 
 ### Problem:
+
 Próba importu tabeli `bets` zwracała błąd:
+
 ```
 ERROR: INSERT has more expressions than target columns
 ```
 
 ### Diagnoza:
+
 ```sql
 -- Lokalna baza (35 kolumn)
-SELECT column_name FROM information_schema.columns 
+SELECT column_name FROM information_schema.columns
 WHERE table_name='bets' ORDER BY ordinal_position;
 
 -- Render (34 kolumny)
@@ -142,6 +153,7 @@ WHERE table_name='bets' ORDER BY ordinal_position;
 ### Rozwiązanie:
 
 #### 1. Aktualizacja Prisma schema
+
 **Plik:** `prisma/schema.prisma`
 
 ```prisma
@@ -157,12 +169,14 @@ model coupons {
 ```
 
 #### 2. Migracja SQL na Render
+
 ```sql
 ALTER TABLE bets ADD COLUMN phase VARCHAR(1);
 ALTER TABLE coupons ADD COLUMN phase VARCHAR(1);
 ```
 
 #### 3. Regeneracja Prisma Client
+
 ```powershell
 npx prisma generate
 ```
@@ -174,6 +188,7 @@ npx prisma generate
 ## 5. Migracja danych
 
 ### Strategia:
+
 - Użycie `pg_dump --column-inserts` (Render blokuje `\COPY` commands)
 - Export z lokalnej bazy PostgreSQL
 - Import do Render PostgreSQL
@@ -231,15 +246,16 @@ psql (render) -f backup-bets.sql
 ### Finalna weryfikacja:
 
 ```sql
-SELECT 'matches' as table_name, COUNT(*) as count FROM matches 
-UNION ALL SELECT 'bets', COUNT(*) FROM bets 
-UNION ALL SELECT 'leagues', COUNT(*) FROM leagues 
-UNION ALL SELECT 'import_jobs', COUNT(*) FROM import_jobs 
-UNION ALL SELECT 'coupons', COUNT(*) FROM coupons 
+SELECT 'matches' as table_name, COUNT(*) as count FROM matches
+UNION ALL SELECT 'bets', COUNT(*) FROM bets
+UNION ALL SELECT 'leagues', COUNT(*) FROM leagues
+UNION ALL SELECT 'import_jobs', COUNT(*) FROM import_jobs
+UNION ALL SELECT 'coupons', COUNT(*) FROM coupons
 ORDER BY table_name;
 ```
 
 **Rezultat:**
+
 ```
 table_name  | count
 ------------+-------
@@ -257,7 +273,9 @@ matches     | 28270
 ## 6. Problemy z n8n workflow
 
 ### Problem:
+
 Workflow "Import Meczów API-Football" zwracał:
+
 ```json
 {
   "totalMatches": 0,
@@ -270,16 +288,19 @@ Workflow "Import Meczów API-Football" zwracał:
 ### Próby debugowania (BŁĘDNE):
 
 Agent początkowo modyfikował kod bez zrozumienia architektury:
+
 - Zmieniano logikę dat w `n8n-webhooks.ts`
 - Modyfikowano `data-importer.ts`
 - **Problem:** Brak znajomości dokumentacji technicznej
 
 ### Rozwiązanie:
+
 Użytkownik poprosił agenta o przeczytanie dokumentacji technicznej.
 
 ### Co odkryto:
 
 #### 1. Architektura systemu (z dokumentacji):
+
 ```
 n8n (localhost:5678 LUB cloud)
   ↓
@@ -289,10 +310,11 @@ Render PostgreSQL (dpg-d6bplrp5pdvs73eeol5g-a.frankfurt-postgres.render.com)
 ```
 
 #### 2. Logika dat (z `n8n-automation-tech.md`):
+
 ```typescript
 // daysAhead=1 -> tylko JUTRO (nie dziś+jutro)
-const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000)
-const startDate = dateFrom || tomorrow.toISOString().split('T')[0]
+const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+const startDate = dateFrom || tomorrow.toISOString().split("T")[0];
 ```
 
 **Wniosek:** Kod był POPRAWNY! `daysAhead=1` importuje JUTRO (25.02), nie dzisiaj (24.02).
@@ -303,7 +325,8 @@ const startDate = dateFrom || tomorrow.toISOString().split('T')[0]
 **Znaczenie:** Codziennie o 10:00  
 **Status:** ✅ Poprawne
 
-**Problem "No trigger output":**  
+**Problem "No trigger output":**
+
 - To NORMALNE dla Schedule Trigger przed faktycznym uruchomieniem
 - Nie można "przetestować" crona przed zaplanowaną godziną
 - Output pojawi się dopiero przy faktycznym wykonaniu o 10:00
@@ -329,11 +352,13 @@ curl https://bet-assistant-backend.onrender.com/api/webhooks/n8n/health
 ### Aktualna konfiguracja (po migracji):
 
 #### Backend:
+
 - **URL produkcyjny:** `https://bet-assistant-backend.onrender.com`
 - **Status:** ✅ Działa (cold start ~30s w free tier)
 - **Deployment:** Render Web Service
 
 #### Database:
+
 - **URL:** `postgresql://betassistant:***@dpg-d6bplrp5pdvs73eeol5g-a.frankfurt-postgres.render.com/betassistant`
 - **Status:** ✅ Wszystkie tabele zmigrowane
 - **Zawartość:**
@@ -344,12 +369,14 @@ curl https://bet-assistant-backend.onrender.com/api/webhooks/n8n/health
   - 381 kuponów
 
 #### n8n Workflow:
+
 - **Trigger:** Schedule Trigger (codziennie o 10:00)
 - **HTTP Request:** `https://bet-assistant-backend.onrender.com/api/webhooks/n8n/import-matches`
 - **Header:** `x-n8n-api-key: {{ $env.BET_ASSISTANT_WEBHOOK_KEY }}`
 - **Status:** ✅ Skonfigurowane i przetestowane z Manual Trigger
 
 #### Frontend:
+
 - **Lokalizacja:** Localhost (development)
 - **Database Browser:** ✅ Połączony z Render PostgreSQL przez backend SSL
 
@@ -424,7 +451,6 @@ curl https://bet-assistant-backend.onrender.com/api/webhooks/n8n/health
    - Backend usypia po 15 min inactivity
    - Pierwsze request może trwać ~30s (cold start)
    - Database: 1 GB storage, 97 hours/miesiąc uptime
-   
 2. **Upgrade zalecany gdy:**
    - Import zajmuje >15 min (może się usypać w trakcie)
    - Potrzeba >1 GB bazy danych

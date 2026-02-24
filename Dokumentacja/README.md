@@ -71,12 +71,14 @@ prisma/           # Database schema & migrations
   - `data/*.json` (dane aplikacji)
 
 **Przykład - ZAKAZANE:**
+
 ```typescript
 ❌ import something from '../stary/...'
 ❌ const path = './stary/public/file.csv'
 ```
 
 **Przykład - POPRAWNE:**
+
 ```typescript
 ✅ const path = path.join(process.cwd(), 'files', 'Lista rozgrywek.csv')
 ✅ import config from '../config/settings.json'
@@ -94,8 +96,37 @@ prisma/           # Database schema & migrations
 
 ## 🔗 Backend
 
-Aplikacja łączy się z istniejącym backendem Express na porcie 3000.
+Aplikacja łączy się z backendem Express na porcie 3000.
 Proxy jest skonfigurowane w `vite.config.ts`.
+
+### Backend + Background Worker
+
+Backend działa w dwóch procesach zarządzanych przez PM2:
+
+- **backend-server** (port 3000) - API endpoints, webhooks, zarządzanie danymi
+- **background-worker** - Kolejka zadań importu, auto-retry po rate limit
+
+**Uruchomienie lokalne:**
+
+```bash
+npm run server     # Backend + Worker (PM2)
+npm run dev        # Frontend (Vite)
+```
+
+**Produkcja:** Deploy na Render Web Service z PostgreSQL
+
+## 🤖 Automatyzacja n8n
+
+System wykorzystuje **n8n** do automatyzacji codziennych zadań:
+
+- Codzienny import nowych meczów (10:00 CET)
+- Aktualizacja wyników zakończonych meczów
+- Backup bazy danych
+
+**Szczegółowa dokumentacja techniczna:**
+
+- [n8n-automation-tech.md](n8n-automation-tech.md) - Architektura, API, deployment, troubleshooting
+- [n8n-workflows/README.md](../n8n-workflows/README.md) - Instrukcja konfiguracji workflow
 
 ## 📝 Migracja ze starego projektu
 

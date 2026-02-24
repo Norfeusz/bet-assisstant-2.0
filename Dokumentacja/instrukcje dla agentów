@@ -11,20 +11,23 @@
 **ABSOLUTNIE ZAKAZANE: Używanie folderu `stary/` w nowym kodzie!**
 
 ❌ **NIGDY NIE ROB TEGO:**
+
 ```typescript
-import something from '../stary/...'
-const filePath = './stary/public/file.csv'
-const path = path.join(process.cwd(), 'stary', '...')
+import something from "../stary/...";
+const filePath = "./stary/public/file.csv";
+const path = path.join(process.cwd(), "stary", "...");
 ```
 
 ✅ **ZAWSZE ROB TO:**
+
 ```typescript
 // Pliki potrzebne w aplikacji są w głównych folderach
-const filePath = path.join(process.cwd(), 'files', 'Lista rozgrywek.csv')
-import config from '../config/settings.json'
+const filePath = path.join(process.cwd(), "files", "Lista rozgrywek.csv");
+import config from "../config/settings.json";
 ```
 
 **DLACZEGO:**
+
 - Folder `stary/` to **TYLKO REFERENCJA** do starej wersji aplikacji
 - Służy **WYŁĄCZNIE do sprawdzania jak działał stary kod**
 - Zostanie **CAŁKOWICIE USUNIĘTY** po zakończeniu migracji
@@ -34,6 +37,7 @@ import config from '../config/settings.json'
   - `data/` - dane runtime aplikacji
 
 **JEŚLI POTRZEBUJESZ PLIKU ZE STAREGO KODU:**
+
 1. Sprawdź czy już nie istnieje w `files/`, `config/`, lub `data/`
 2. Jeśli nie - skopiuj go do odpowiedniej lokalizacji
 3. Zaktualizuj wszystkie ścieżki w kodzie
@@ -518,7 +522,7 @@ Bet Assistant 2.0 wykorzystuje **n8n** do automatyzacji codziennych zadań:
 ✅ **Codzienny import nowych meczów** (10:00 - mecze na następny dzień)  
 🔄 **Aktualizacja wyników** (0:01 - wyniki z dnia poprzedniego)  
 💾 **Backup bazy danych** (0:00 - codziennie o północy)  
-📊 **Monitoring i alerty** (co 15 min)  
+📊 **Monitoring i alerty** (co 15 min)
 
 ### 11.5.2 Architektura
 
@@ -550,23 +554,27 @@ PostgreSQL Database
 ### 11.5.3 Kluczowe pliki
 
 **Backend:**
+
 - `server/routes/n8n-webhooks.ts` - wszystkie webhooky
 - `server/league-config-server.ts` - import routera
 - `.env` - konfiguracja (N8N_WEBHOOK_KEY)
 
 **n8n workflows:**
+
 - `n8n-workflows/1-daily-import-matches.json`
 - `n8n-workflows/2-update-results-2h.json`
 - `n8n-workflows/3-daily-database-backup.json`
 - `n8n-workflows/4-monitoring-alerts.json`
 
 **Dokumentacja:**
+
 - `n8n-workflows/README.md` - instrukcja użytkownika
 - `Dokumentacja/n8n-automation-tech.md` - dokumentacja techniczna
 
 ### 11.5.4 API Endpoints dla n8n
 
 #### Import meczów
+
 ```http
 POST /api/webhooks/n8n/import-matches
 x-n8n-api-key: <key>
@@ -580,6 +588,7 @@ Body:
 ```
 
 #### Aktualizacja wyników
+
 ```http
 POST /api/webhooks/n8n/update-results
 x-n8n-api-key: <key>
@@ -592,6 +601,7 @@ Body:
 ```
 
 #### Backup bazy
+
 ```http
 POST /api/webhooks/n8n/backup-database
 x-n8n-api-key: <key>
@@ -604,12 +614,14 @@ Body:
 ```
 
 #### Health check
+
 ```http
 GET /api/webhooks/n8n/health
 x-n8n-api-key: <key>
 ```
 
 #### Status systemu
+
 ```http
 GET /api/webhooks/n8n/status
 x-n8n-api-key: <key>
@@ -617,26 +629,29 @@ x-n8n-api-key: <key>
 
 ### 11.5.5 Różnice: n8n webhook vs Background Worker
 
-| Aspekt | n8n Webhook | Background Worker |
-|--------|-------------|-------------------|
-| **Trigger** | HTTP z n8n (Cron) | Polling bazy (pending jobs) |
-| **Kolejka** | Brak - bezpośrednie wykonanie | Tak - import_jobs table |
-| **Resume** | Nie | Tak (progress tracking) |
-| **Szybkość** | Szybsze (no queue) | Wolniejsze (queue + DB) |
-| **Przypadek użycia** | Automatyzacja | Ręczne zadania z UI |
+| Aspekt               | n8n Webhook                   | Background Worker           |
+| -------------------- | ----------------------------- | --------------------------- |
+| **Trigger**          | HTTP z n8n (Cron)             | Polling bazy (pending jobs) |
+| **Kolejka**          | Brak - bezpośrednie wykonanie | Tak - import_jobs table     |
+| **Resume**           | Nie                           | Tak (progress tracking)     |
+| **Szybkość**         | Szybsze (no queue)            | Wolniejsze (queue + DB)     |
+| **Przypadek użycia** | Automatyzacja                 | Ręczne zadania z UI         |
 
 **WAŻNE:** Oba systemy działają równolegle:
+
 - **UI → Kolejka → Worker** - dla ręcznych importów użytkownika
 - **n8n → Webhook → Direct** - dla automatycznych zadań
 
 ### 11.5.6 Bezpieczeństwo
 
 **Autoryzacja:**
+
 - Każdy endpoint wymaga nagłówka `x-n8n-api-key`
 - Klucz musi być identyczny w `.env` i n8n
 - Brak klucza → 401 Unauthorized
 
 **Generowanie klucza:**
+
 ```powershell
 # PowerShell
 $bytes = New-Object byte[] 32
@@ -645,6 +660,7 @@ $bytes = New-Object byte[] 32
 ```
 
 **Konfiguracja:**
+
 ```env
 # .env
 N8N_WEBHOOK_KEY=your-generated-secure-key-32-chars
@@ -653,6 +669,7 @@ N8N_WEBHOOK_KEY=your-generated-secure-key-32-chars
 ### 11.5.7 Modyfikacje systemu n8n
 
 **Gdy dodajesz nowy webhook:**
+
 1. Dodaj endpoint w `server/routes/n8n-webhooks.ts`
 2. Zastosuj `webhookAuth` middleware (router.use)
 3. Zwróć zawsze JSON z `success: true/false`
@@ -661,6 +678,7 @@ N8N_WEBHOOK_KEY=your-generated-secure-key-32-chars
 6. Utwórz przykładowy workflow JSON
 
 **Gdy modyfikujesz istniejący:**
+
 1. Sprawdź czy nie łamiesz kompatybilności
 2. Aktualizuj dokumentację
 3. Testuj lokalnie przed deploymentem
@@ -669,19 +687,23 @@ N8N_WEBHOOK_KEY=your-generated-secure-key-32-chars
 ### 11.5.8 Troubleshooting n8n
 
 **Problem: "Unauthorized"**
+
 - Sprawdź `N8N_WEBHOOK_KEY` w `.env` i n8n
 - Restart serwera po zmianie `.env`
 
 **Problem: Timeout**
+
 - Zwiększ timeout w n8n HTTP Request node
 - Zmniejsz zakres dat/lig w request
 
 **Problem: Rate limit API Football**
+
 - Zmniejsz częstotliwość workflows
 - Ogranicz liczbę lig
 - Sprawdź plan API Football (FREE vs PREMIUM)
 
 **Debug:**
+
 1. Sprawdź logi serwera backend w terminalu
 2. Sprawdź execution logs w n8n UI
 3. Test endpoint ręcznie (curl/Postman)
@@ -717,6 +739,7 @@ Projekt: Migracja z vanilla JS → React + TypeScript
 - **Następny krok:** ETAP 1 - Infrastruktura + deploy n8n workflows
 
 **Nowe funkcje:**
+
 - ✅ Dedykowane endpointy n8n (`/api/webhooks/n8n/*`)
 - ✅ 4 workflows: import, update, backup, monitoring
 - ✅ Autoryzacja API key

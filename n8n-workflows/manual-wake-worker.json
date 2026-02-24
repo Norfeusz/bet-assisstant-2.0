@@ -1,0 +1,182 @@
+{
+  "name": "Manual Wake Worker",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "When clicking 'Test workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://bet-assistant-backend.onrender.com/api/webhooks/n8n/health",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-n8n-api-key",
+              "value": "={{ $env.BET_ASSISTANT_WEBHOOK_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "http-wake-backend",
+      "name": "Wake Backend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\n\nif (response.status === 'healthy') {\n  return {\n    json: {\n      success: true,\n      message: '✅ Backend is awake and healthy!',\n      database: response.checks.database,\n      apiKey: response.checks.apiFootballKey,\n      timestamp: new Date().toISOString()\n    }\n  };\n} else {\n  return {\n    json: {\n      success: false,\n      message: '⚠️ Backend responded but status unknown',\n      response: response\n    }\n  };\n}"
+      },
+      "id": "code-format-response",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://bet-assistant-backend.onrender.com/api/import-jobs/status",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-n8n-api-key",
+              "value": "={{ $env.BET_ASSISTANT_WEBHOOK_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "http-check-pending-jobs",
+      "name": "Check Pending Jobs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const healthData = $('Format Response').first().json;\nconst jobsData = $input.first().json;\n\nreturn {\n  json: {\n    backend: healthData,\n    jobs: {\n      pending: jobsData.pending || [],\n      rate_limited: jobsData.rate_limited || [],\n      running: jobsData.running || [],\n      total: (jobsData.pending?.length || 0) + (jobsData.rate_limited?.length || 0) + (jobsData.running?.length || 0)\n    },\n    message: `Worker is awake! Found ${(jobsData.pending?.length || 0) + (jobsData.rate_limited?.length || 0)} jobs waiting.`,\n    nextAction: (jobsData.pending?.length > 0 || jobsData.rate_limited?.length > 0) \n      ? 'Worker will process jobs in next polling cycle (max 5 minutes)'\n      : 'No pending jobs, worker is idle'\n  }\n};"
+      },
+      "id": "code-final-summary",
+      "name": "Final Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Manual Wake Worker\n\nUżyj tego workflow gdy:\n✅ Ręcznie dodałeś job przez UI/API\n✅ Render zasnął poza godzinami Keep-Alive\n✅ Chcesz sprawdzić status workera\n\nKliknij \"Test workflow\" 👆",
+        "height": 240,
+        "width": 400,
+        "color": 4
+      },
+      "id": "sticky-note-instructions",
+      "name": "Instrukcje",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        180,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "content": "⏱️ Cold start może trwać 20-40s\nZaczekaj cierpliwie...",
+        "height": 100,
+        "width": 300,
+        "color": 5
+      },
+      "id": "sticky-note-cold-start",
+      "name": "Uwaga",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        420,
+        140
+      ]
+    }
+  ],
+  "connections": {
+    "When clicking 'Test workflow'": {
+      "main": [
+        [
+          {
+            "node": "Wake Backend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wake Backend": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Response": {
+      "main": [
+        [
+          {
+            "node": "Check Pending Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Pending Jobs": {
+      "main": [
+        [
+          {
+            "node": "Final Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2026-02-24T00:00:00.000Z",
+  "versionId": "1"
+}

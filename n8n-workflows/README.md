@@ -296,6 +296,100 @@ Jeśli używasz powiadomień/integracji:
 
 ---
 
+### 5. Keep-Alive - Render Worker (`keep-alive-render.json`)
+
+**Trigger:** Cron - co 10 minut (tylko w godzinach pracy)  
+**Funkcja:** Podtrzymuje Render backend aktywnym, aby worker mógł procesować zadania
+
+**⚠️ KRYTYCZNE dla Render Free Tier:**
+- Worker polling loop nie generuje HTTP traffic
+- Render usypia po 15 min bez HTTP
+- Worker nie budzi się samodzielnie
+- Jobs czekają w kolejce ale nie są procesowane
+
+**Harmonogram:**
+```
+Cron: */10 10-16,20-23,0-3 * * *
+Aktywny:
+  - 10:00-16:59 NY (16:00-22:59 PL) - 7h - daily import + rate limit recovery
+  - 20:00-03:59 NY (02:00-09:59 PL) - 8h - update results + nocne zadania
+Śpi:
+  - 04:00-09:59 NY (10:00-15:59 PL) - 6h
+  - 17:00-19:59 NY (23:00-01:59 PL) - 3h
+Razem: 13h/dzień
+```
+
+**Koszt:**
+- 13h/dzień × 30 dni = **390 godzin/miesiąc**
+- Render Free Tier limit: 750h/miesiąc
+- **Wykorzystanie: 52%** (margines 48%)
+
+**Konfiguracja:**
+1. Import `keep-alive-render.json`
+2. Ustaw Environment Variable: `BET_ASSISTANT_WEBHOOK_KEY`
+3. Aktywuj workflow (przełącznik Active)
+
+**Endpoint:** `GET /api/webhooks/n8n/health`
+
+**Bez tego workflow:**
+- Worker zaśnie podczas 15-min rate limit wait
+- Jobs mogą pozostać w statusie 'rate_limited' do następnego dnia
+- Ręczne importy poza harmonogramem nie będą procesowane
+
+---
+
+### 6. Manual Wake Worker (`manual-wake-worker.json`)
+
+**Trigger:** Manual (kliknięcie użytkownika)  
+**Funkcja:** Ręczne obudzenie Render backend + sprawdzenie pending jobs
+
+**Kiedy używać:**
+✅ Dodałeś ręcznie job przez UI/API poza godzinami Keep-Alive  
+✅ Testujesz import bez czekania na scheduled trigger  
+✅ Development/Debug - sprawdzenie czy backend działa  
+✅ Render zasnął i potrzebujesz natychmiastowo wykonać zadanie
+
+**Co robi:**
+1. Budzi backend (GET /health) - timeout 60s dla cold start
+2. Sprawdza health status (database, API key)
+3. Pobiera listę pending jobs (GET /import-jobs/status)
+4. Zwraca podsumowanie: ile jobs czeka, ile rate_limited, ile running
+
+**Przykładowa odpowiedź:**
+```json
+{
+  "backend": {
+    "success": true,
+    "message": "✅ Backend is awake and healthy!",
+    "database": "ok",
+    "apiKey": "configured"
+  },
+  "jobs": {
+    "pending": [{ "id": 346, "type": "new_matches", "leagues": 159 }],
+    "rate_limited": [{ "id": 345, "reset_at": "...", "waiting_minutes": 5 }],
+    "running": [],
+    "total": 2
+  },
+  "message": "Worker is awake! Found 2 jobs waiting.",
+  "nextAction": "Worker will process jobs in next polling cycle (max 5 minutes)"
+}
+```
+
+**Konfiguracja:**
+1. Import `manual-wake-worker.json`
+2. Ustaw Environment Variable: `BET_ASSISTANT_WEBHOOK_KEY`
+3. Kliknij "Test workflow" gdy potrzebujesz
+
+**Endpoints:**
+- `GET /api/webhooks/n8n/health` - health check
+- `GET /api/webhooks/n8n/import-jobs/status` - lista pending jobs
+
+**Różnica vs Keep-Alive:**
+- Manual Wake: Na żądanie, pokazuje status jobs, cost ~0h
+- Keep-Alive: Automatyczny, produkcja, cost 390h/miesiąc
+
+---
+
 ## 🔌 API Endpoints
 
 ### Autoryzacja

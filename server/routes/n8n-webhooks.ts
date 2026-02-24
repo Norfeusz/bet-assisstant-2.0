@@ -527,4 +527,86 @@ router.post('/backup-database', webhookAuth, async (req, res) => {
 	}
 })
 
+// ====================================
+// WEBHOOK: Sprawdź status pending jobs (dla manual wake worker)
+// ====================================
+router.get('/import-jobs/status', webhookAuth, async (req, res) => {
+	try {
+		// Pobierz joby według statusu
+		const jobs = await prisma.$queryRaw<any[]>`
+			SELECT 
+				id, 
+				status,
+				job_type,
+				array_length(leagues, 1) as league_count,
+				date_from::text,
+				date_to::text,
+				imported_matches,
+				total_matches,
+				rate_limit_reset_at,
+				created_at,
+				started_at
+			FROM import_jobs
+			WHERE status IN ('in_queue', 'pending', 'running', 'rate_limited')
+			ORDER BY 
+				CASE 
+					WHEN status = 'running' THEN 1
+					WHEN status = 'rate_limited' THEN 2
+					WHEN status = 'pending' THEN 3
+					WHEN status = 'in_queue' THEN 4
+				END,
+				created_at ASC
+		`
+
+		// Grupuj według statusu
+		const grouped = {
+			running: jobs.filter(j => j.status === 'running'),
+			rate_limited: jobs.filter(j => j.status === 'rate_limited'),
+			pending: jobs.filter(j => j.status === 'pending' || j.status === 'in_queue')
+		}
+
+		// Uproszczona odpowiedź
+		res.json({
+			success: true,
+			summary: {
+				total: jobs.length,
+				running: grouped.running.length,
+				rate_limited: grouped.rate_limited.length,
+				pending: grouped.pending.length
+			},
+			running: grouped.running.map(j => ({
+				id: j.id,
+				type: j.job_type,
+				progress: j.total_matches > 0 
+					? `${j.imported_matches}/${j.total_matches}` 
+					: 'starting...',
+				started: j.started_at
+			})),
+			rate_limited: grouped.rate_limited.map(j => ({
+				id: j.id,
+				type: j.job_type,
+				reset_at: j.rate_limit_reset_at,
+				progress: `${j.imported_matches}/${j.total_matches}`,
+				waiting_minutes: j.rate_limit_reset_at 
+					? Math.ceil((new Date(j.rate_limit_reset_at).getTime() - Date.now()) / 60000)
+					: 0
+			})),
+			pending: grouped.pending.map(j => ({
+				id: j.id,
+				type: j.job_type,
+				leagues: j.league_count,
+				date_range: `${j.date_from} → ${j.date_to}`,
+				created: j.created_at
+			}))
+		})
+
+	} catch (error: any) {
+		console.error('❌ Error fetching job status:', error)
+		res.status(500).json({
+			success: false,
+			error: error.message
+		})
+	}
+})
+
 export default router
