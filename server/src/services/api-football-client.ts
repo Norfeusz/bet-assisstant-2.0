@@ -39,7 +39,7 @@ export class ApiFootballClient {
 
 		// Initialize rate limiter with values from env or defaults
 		const dailyLimit = parseInt(process.env.RATE_LIMIT_REQUESTS_PER_DAY || '100')
-		const hourlyLimit = parseInt(process.env.RATE_LIMIT_REQUESTS_PER_HOUR || '10')
+		const hourlyLimit = parseInt(process.env.RATE_LIMIT_REQUESTS_PER_HOUR || '7500')
 		this.rateLimiter = new RateLimiter(dailyLimit, hourlyLimit)
 	}
 
