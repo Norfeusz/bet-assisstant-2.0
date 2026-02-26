@@ -721,22 +721,38 @@ Kliknij poza panelem aby zamknąć
 # Konfiguracja:
 
 Conditions:
-  Add Condition → Boolean
+  Add Condition → Number (WYBIERZ "Number", NIE "Boolean"!)
 
-  Value 1: {{ $input.all().length }} (liczba items z poprzedniego node)
+  Value 1: {{ $input.all().length }}
 
-  Operation: is not empty
+  Operation: Larger (wybierz z listy)
 
-  (NIE wypełniaj Value 2)
+  Value 2: 0
 
 Nazwa node: "Has Results?"
 ```
 
 **🎓 CO TO ROBI:**
 
-- Sprawdza czy są jakieś items do przetworzenia
+- Sprawdza czy liczba items > 0
 - Jeśli NIE (0 results) → idzie do FALSE branch (później dodamy komunikat)
 - Jeśli TAK → idzie do TRUE branch (loop import)
+
+**🔴 Troubleshooting:**
+
+```
+Błąd: "Wrong type: '40' is a string but was expecting a boolean"
+Przyczyna: Wybrałeś "Boolean" zamiast "Number" w condition type
+
+Fix:
+1. Kliknij "Has Results?" node
+2. Conditions → Usuń current condition (X)
+3. Add Condition ponownie → tym razem wybierz "Number"
+4. Value 1: {{ $input.all().length }}
+5. Operation: Larger
+6. Value 2: 0
+7. Save
+```
 
 ### Krok 6: Dodaj Google Sheets node (BEZPOŚREDNI IMPORT!)
 
@@ -1084,14 +1100,20 @@ return response.results.map((item) => ({ json: item })); // Array → Items
 **Pattern:**
 
 ```
+Condition Type: Number
 Value 1: {{ $input.all().length }}
-Operation: is not empty
+Operation: Larger
+Value 2: 0
 ```
 
 **Branches:**
 
-- `true` (zielona kropka) → Jest coś do przetworzenia
+- `true` (zielona kropka) → Jest coś do przetworzenia (length > 0)
 - `false` (czerwona kropka) → Pusta lista, error handling
+
+**Typowe błędy:**
+- NIE używaj "Boolean" + "is not empty" dla liczb
+- `.length` zwraca Number, nie String - użyj condition typu "Number"
 
 ### 4. Implicit Loop w n8n
 
