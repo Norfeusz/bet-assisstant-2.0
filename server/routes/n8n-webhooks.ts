@@ -656,13 +656,16 @@ router.post('/search-bets', webhookAuth, async (req, res) => {
 	const startTime = Date.now()
 	
 	try {
+		// Fallback jeśli req.body jest undefined (n8n może nie wysyłać JSON body)
+		const body = req.body || {}
+		
 		const {
 			searchType = 'winner-vs-loser',
 			daysAhead = 1,
 			topCount = 40,
 			matchCount = 10,
 			winPercentage = 70
-		} = req.body as SearchBetsRequest
+		} = body as SearchBetsRequest
 
 		console.log('🔍 n8n webhook: search-bets (SYNC)', {
 			searchType,

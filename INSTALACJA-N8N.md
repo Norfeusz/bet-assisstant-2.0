@@ -615,26 +615,48 @@ URL: https://bet-assistant-backend.onrender.com/api/webhooks/n8n/search-bets
 
 Authentication: None
 
-Headers:
-  x-n8n-api-key: <TWÓJ_KLUCZ_Z_RENDER>
-  Content-Type: application/json
+Headers (WAŻNE - dodaj header):
+  Kliknij "Add Header"
+  Name: x-n8n-api-key
+  Value: <TWÓJ_KLUCZ_Z_RENDER>
+  
+  ⚠️ NIE dodawaj "Content-Type: application/json" ręcznie!
+     n8n automatycznie doda gdy wybierzesz "Body Content Type: JSON"
 
-Body:
-  Body Content Type: JSON
-
-  JSON:
+Body (KRYTYCZNE - musi być):
+  ⬇️ Rozwiń sekcję "Body" (jeśli zwinięta)
+  
+  Body Content Type: JSON (wybierz z listy)
+  
+  ⚠️ WAŻNE: Pole JSON pojawi się dopiero po wybraniu "JSON" w Body Content Type!
+  
+  JSON (wklej poniższy obiekt):
   {
     "searchType": "winner-vs-loser",
     "daysAhead": 1,
     "topCount": 40,
-    "matchCount": 10,
-    "winPercentage": 70
+    "matchCount": 10
   }
 
-Options → Timeout: 45000
-(45 sekund - dajemy czas na pełne wyszukiwanie)
+Options (rozwiń sekcję):
+  Timeout: 45000
+  (45 sekund - dajemy czas na pełne wyszukiwanie)
 
 Nazwa node: "Search Tomorrow Bets"
+```
+
+**🔴 Troubleshooting - częste błędy:**
+
+```
+Błąd: "Cannot read properties of undefined (reading 'searchType')"
+Przyczyna: n8n nie wysłał JSON body
+
+Fix:
+1. Kliknij node "Search Tomorrow Bets"
+2. Sprawdź sekcję "Body" - czy jest rozwinięta?
+3. Body Content Type MUSI być: "JSON" (nie "Form-Data", nie "Raw")
+4. Pole JSON MUSI zawierać obiekt (sprawdź czy wszystkie " są podwójne, nie pojedyncze)
+5. Save → Test workflow ponownie
 ```
 
 **Co oznaczają parametry:**
@@ -643,7 +665,6 @@ Nazwa node: "Search Tomorrow Bets"
 - `daysAhead: 1`: Szukaj tylko na **jutro** (nie dziś, nie pojutrze)
 - `topCount: 40`: Zwróć TOP 40 najlepszych zakładów
 - `matchCount: 10`: Minimalna liczba meczów w historii dla analizy
-- `winPercentage: 70`: Minimalny win% dla rekomendacji
 
 ### Krok 4: Dodaj Code node - Parse Results (LEARNING!)
 
