@@ -3,6 +3,8 @@ import { PrismaClient } from '@prisma/client'
 import { DataImporter } from '../src/services/data-importer.js'
 import { ApiFootballClient } from '../src/services/api-football-client.js'
 import { LeagueSelector } from '../src/services/league-selector.js'
+import { searchByType } from '../src/services/bet-finder-algorithms.js'
+import { calculateBetStatistics } from '../utils/bet-statistics.js'
 import dotenv from 'dotenv'
 
 dotenv.config()
@@ -635,6 +637,247 @@ router.get('/import-jobs/status', webhookAuth, async (req, res) => {
 		res.status(500).json({
 			success: false,
 			error: error.message
+		})
+	}
+})
+
+// ====================================
+// WEBHOOK: Wyszukiwanie zakładów (SYNC dla n8n learning)
+// ====================================
+interface SearchBetsRequest {
+	searchType?: string         // winner-vs-loser, most-goals, etc. (default: winner-vs-loser)
+	daysAhead?: number          // Ile dni od jutra (default: 1 = tylko jutro)
+	topCount?: number           // Ile najlepszych wyników zwrócić (default: 10)
+	matchCount?: number         // Minimalna liczba meczów w historii (default: 10)
+	winPercentage?: number      // Minimalny win% dla winner-vs-loser (default: 70)
+}
+
+router.post('/search-bets', webhookAuth, async (req, res) => {
+	const startTime = Date.now()
+	
+	try {
+		const {
+			searchType = 'winner-vs-loser',
+			daysAhead = 1,
+			topCount = 40,
+			matchCount = 10,
+			winPercentage = 70
+		} = req.body as SearchBetsRequest
+
+		console.log('🔍 n8n webhook: search-bets (SYNC)', {
+			searchType,
+			daysAhead,
+			topCount,
+			winPercentage
+		})
+
+		// Oblicz zakres dat (tylko JUTRO jeśli daysAhead=1)
+		const today = new Date()
+		const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000)
+		const endDate = new Date(today.getTime() + daysAhead * 24 * 60 * 60 * 1000)
+
+		const dateFrom = tomorrow.toISOString().split('T')[0]
+		const dateTo = endDate.toISOString().split('T')[0]
+
+		console.log(`📅 Search range: ${dateFrom} → ${dateTo}`)
+
+		// Wywołaj algorytm wyszukiwania
+		const results = await searchByType(searchType, {
+			dateFrom,
+			dateTo,
+			topCount,
+			matchCount
+		})
+
+		const duration = ((Date.now() - startTime) / 1000).toFixed(2)
+
+		console.log(`✅ Search completed in ${duration}s: ${results.length} results`)
+
+		// Rozbudowa każdego wyniku o pełne statystyki (format Step 2 - 44 kolumny)
+		const enrichedResults = await Promise.all(results.map(async (r) => {
+			try {
+				// 1. Określ betType i betOption z recommendation
+				const betType = 'Winner'
+				let betOption = '1' // default: gospodarz
+				
+				// Wyciągnij "Zakład: 1" lub "Zakład: 2" z recommendation
+				const betMatch = r.recommendation.match(/Zakład:\s*(\d+)/)
+				if (betMatch) {
+					betOption = betMatch[1] // "1" lub "2"
+				}
+
+				// 2. Wybierz odpowiedni kurs
+				const odds = betOption === '1' ? r.homeOdds : r.awayOdds
+
+				// 3. Pobierz standing z bazy
+				const match = await prisma.matches.findUnique({
+					where: { id: r.matchId },
+					select: {
+						standing_home: true,
+						standing_away: true
+					}
+				})
+
+				// 4. Oblicz statystyki 5/10/15 × overall/ha (6 wywołań)
+				const stats5Overall = await calculateBetStatistics(r.homeTeam, r.awayTeam, betType, betOption, 'overall', r.league, 5)
+				const stats5Ha = await calculateBetStatistics(r.homeTeam, r.awayTeam, betType, betOption, 'ha', r.league, 5)
+				const stats10Overall = await calculateBetStatistics(r.homeTeam, r.awayTeam, betType, betOption, 'overall', r.league, 10)
+				const stats10Ha = await calculateBetStatistics(r.homeTeam, r.awayTeam, betType, betOption, 'ha', r.league, 10)
+				const stats15Overall = await calculateBetStatistics(r.homeTeam, r.awayTeam, betType, betOption, 'overall', r.league, 15)
+				const stats15Ha = await calculateBetStatistics(r.homeTeam, r.awayTeam, betType, betOption, 'ha', r.league, 15)
+
+				// 5. Wylicz SZANSE (średnia z 8 wartości H-O: tylko 5 i 10 meczów)
+				const percentages = [
+					stats5Overall.homePercentage,
+					stats5Overall.awayPercentage,
+					stats5Ha.homePercentage,
+					stats5Ha.awayPercentage,
+					stats10Overall.homePercentage,
+					stats10Overall.awayPercentage,
+					stats10Ha.homePercentage,
+					stats10Ha.awayPercentage,
+				]
+
+				const validPercentages = percentages.filter(p => typeof p === 'number') as number[]
+				
+				let szanse: string
+				if (validPercentages.length < 4) {
+					szanse = 'za mało danych'
+				} else {
+					const sum = validPercentages.reduce((acc, val) => acc + val, 0)
+					const average = sum / validPercentages.length
+					szanse = average.toFixed(1).replace('.', ',') + '%'
+				}
+
+				// 6. Helper: format percentage
+				const formatPercent = (value: number | string) => {
+					return typeof value === 'string' ? value : `${value}%`
+				}
+
+				// 7. Zwróć pełny obiekt (44 kolumny A-AR)
+				return {
+					// A-E: Podstawowe dane
+					homeTeam: r.homeTeam,
+					awayTeam: r.awayTeam,
+					betType: betType,
+					betOption: betOption,
+					szanse: szanse,
+					
+					// F-G: Kurs i moc bet
+					odds: odds || '',
+					mocBet: '', // Oblicza arkusz: =E*F
+					
+					// H-S: Statystyki 5/10/15 × overall/ha
+					stats5OverallHome: formatPercent(stats5Overall.homePercentage),
+					stats5OverallAway: formatPercent(stats5Overall.awayPercentage),
+					stats5HaHome: formatPercent(stats5Ha.homePercentage),
+					stats5HaAway: formatPercent(stats5Ha.awayPercentage),
+					stats10OverallHome: formatPercent(stats10Overall.homePercentage),
+					stats10OverallAway: formatPercent(stats10Overall.awayPercentage),
+					stats10HaHome: formatPercent(stats10Ha.homePercentage),
+					stats10HaAway: formatPercent(stats10Ha.awayPercentage),
+					stats15OverallHome: formatPercent(stats15Overall.homePercentage),
+					stats15OverallAway: formatPercent(stats15Overall.awayPercentage),
+					stats15HaHome: formatPercent(stats15Ha.homePercentage),
+					stats15HaAway: formatPercent(stats15Ha.awayPercentage),
+					
+					// T-W: Ręczne kolumny (puste)
+					kuponR: '',
+					wszedlR: '',
+					wynikHomeR: '',
+					wynikAwayR: '',
+					
+					// X-Y: Standing
+					standingHome: match?.standing_home || '',
+					standingAway: match?.standing_away || '',
+					
+					// Z: Komentarz (pusty)
+					komentarzR: '',
+					
+					// AA-AD: Dane meczu
+					country: r.country,
+					league: r.league,
+					matchDate: r.matchDate,
+					matchId: r.matchId,
+					
+					// AE: ID Kuponu (pusty - ręczne)
+					idKuponuR: '',
+					
+					// AF-AG: Linki
+					superbetLink: r.superbetLink || '',
+					flashscoreLink: r.flashscoreLink || '',
+					
+					// AH-AR: (obecnie nieuŜywane - puste)
+					notesAR: '',
+					
+					// Dodatkowe - dla kompatybilności z n8n (jeśli potrzebne)
+					score: r.score,
+					recommendation: r.recommendation
+				}
+			} catch (error: any) {
+				console.error(`Error enriching result for ${r.homeTeam} vs ${r.awayTeam}:`, error.message)
+				// Zwróć minimalny obiekt w razie błędu
+				return {
+					homeTeam: r.homeTeam,
+					awayTeam: r.awayTeam,
+					betType: 'Winner',
+					betOption: '1',
+					szanse: 'błąd',
+					odds: r.homeOdds || '',
+					mocBet: '',
+					stats5OverallHome: 'błąd',
+					stats5OverallAway: 'błąd',
+					stats5HaHome: 'błąd',
+					stats5HaAway: 'błąd',
+					stats10OverallHome: 'błąd',
+					stats10OverallAway: 'błąd',
+					stats10HaHome: 'błąd',
+					stats10HaAway: 'błąd',
+					stats15OverallHome: 'błąd',
+					stats15OverallAway: 'błąd',
+					stats15HaHome: 'błąd',
+					stats15HaAway: 'błąd',
+					kuponR: '',
+					wszedlR: '',
+					wynikHomeR: '',
+					wynikAwayR: '',
+					standingHome: '',
+					standingAway: '',
+					komentarzR: '',
+					country: r.country,
+					league: r.league,
+					matchDate: r.matchDate,
+					matchId: r.matchId,
+					idKuponuR: '',
+					superbetLink: r.superbetLink || '',
+					flashscoreLink: r.flashscoreLink || '',
+					notesAR: '',
+					score: r.score,
+					recommendation: r.recommendation
+				}
+			}
+		}))
+
+		// Zwróc synchronicznie (n8n czeka na response, timeout 45s ustawiony w n8n)
+		res.json({
+			success: true,
+			count: enrichedResults.length,
+			searchType,
+			dateRange: { from: dateFrom, to: dateTo },
+			duration: parseFloat(duration),
+			results: enrichedResults
+		})
+
+	} catch (error: any) {
+		const duration = ((Date.now() - startTime) / 1000).toFixed(2)
+		
+		console.error('❌ Search-bets webhook error:', error)
+
+		res.status(500).json({
+			success: false,
+			error: error.message,
+			duration: parseFloat(duration),
+			retryable: true  // n8n może ponowić próbę
 		})
 	}
 })
