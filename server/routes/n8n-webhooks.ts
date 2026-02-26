@@ -700,7 +700,7 @@ router.post('/search-bets', webhookAuth, async (req, res) => {
 		const enrichedResults = await Promise.all(results.map(async (r) => {
 			try {
 				// 1. Określ betType i betOption z recommendation
-				const betType = 'Winner'
+				const displayBetType = 'Winner' // dla wyświetlania w arkuszu
 				let betOption = '1' // default: gospodarz
 				
 				// Wyciągnij "Zakład: 1" lub "Zakład: 2" z recommendation
@@ -722,12 +722,13 @@ router.post('/search-bets', webhookAuth, async (req, res) => {
 				})
 
 				// 4. Oblicz statystyki 5/10/15 × overall/ha (6 wywołań)
-				const stats5Overall = await calculateBetStatistics(r.homeTeam, r.awayTeam, betType, betOption, 'overall', r.league, 5)
-				const stats5Ha = await calculateBetStatistics(r.homeTeam, r.awayTeam, betType, betOption, 'ha', r.league, 5)
-				const stats10Overall = await calculateBetStatistics(r.homeTeam, r.awayTeam, betType, betOption, 'overall', r.league, 10)
-				const stats10Ha = await calculateBetStatistics(r.homeTeam, r.awayTeam, betType, betOption, 'ha', r.league, 10)
-				const stats15Overall = await calculateBetStatistics(r.homeTeam, r.awayTeam, betType, betOption, 'overall', r.league, 15)
-				const stats15Ha = await calculateBetStatistics(r.homeTeam, r.awayTeam, betType, betOption, 'ha', r.league, 15)
+				// UWAGA: calculateBetStatistics oczekuje betType='1' lub '2', nie 'Winner'
+				const stats5Overall = await calculateBetStatistics(r.homeTeam, r.awayTeam, betOption, betOption, 'overall', r.league, 5)
+				const stats5Ha = await calculateBetStatistics(r.homeTeam, r.awayTeam, betOption, betOption, 'ha', r.league, 5)
+				const stats10Overall = await calculateBetStatistics(r.homeTeam, r.awayTeam, betOption, betOption, 'overall', r.league, 10)
+				const stats10Ha = await calculateBetStatistics(r.homeTeam, r.awayTeam, betOption, betOption, 'ha', r.league, 10)
+				const stats15Overall = await calculateBetStatistics(r.homeTeam, r.awayTeam, betOption, betOption, 'overall', r.league, 15)
+				const stats15Ha = await calculateBetStatistics(r.homeTeam, r.awayTeam, betOption, betOption, 'ha', r.league, 15)
 
 				// 5. Wylicz SZANSE (średnia z 8 wartości H-O: tylko 5 i 10 meczów)
 				const percentages = [
@@ -762,7 +763,7 @@ router.post('/search-bets', webhookAuth, async (req, res) => {
 					// A-E: Podstawowe dane
 					homeTeam: r.homeTeam,
 					awayTeam: r.awayTeam,
-					betType: betType,
+					betType: displayBetType,
 					betOption: betOption,
 					szanse: szanse,
 					
